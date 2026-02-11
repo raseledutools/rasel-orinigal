@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Control System Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        canvas { touch-action: none; }
+        .tab-btn { @apply px-4 py-2 text-sm font-bold text-slate-400 hover:text-white border-b-2 border-transparent transition-colors; }
+        .tab-btn.active { @apply text-blue-400 border-blue-400; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Navbar -->
+    <header class="h-14 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-white">CS</div>
+            <h1 class="font-bold text-lg tracking-wide">Control System <span class="text-blue-400">Lab</span></h1>
+        </div>
+        <div class="text-xs font-mono text-slate-400 hidden md:block">
+            Full Plot Suite: Root Locus, Bode, Nyquist, Nichols
+        </div>
+    </header>
+<nav style="background: #222; padding: 10px; text-align: center;">
+    <a href="index.html" style="color: white; margin: 10px; text-decoration: none;">Home</a>
+    <a href="about.html" style="color: white; margin: 10px; text-decoration: none;">About</a>
+    <a href="contact.html" style="color: white; margin: 10px; text-decoration: none;">Contact</a>
+    <a href="project.html" style="color: white; margin: 10px; text-decoration: none;">Project</a>
+</nav>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- Left: Sidebar -->
+        <aside class="w-full lg:w-80 bg-slate-900 border-r border-slate-700 flex flex-col overflow-y-auto shrink-0 z-10 shadow-xl">
+            
+            <!-- Transfer Function -->
+            <div class="p-4 border-b border-slate-700 bg-slate-800/30">
+                <h2 class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-2">Transfer Function</h2>
+                <div id="tfEquation" class="font-serif text-lg text-white bg-slate-950 p-2 rounded border border-slate-700 overflow-x-auto whitespace-nowrap min-h-[50px] flex items-center justify-center">
+                    Loading...
+                </div>
+            </div>
+
+            <!-- Analysis Box -->
+            <div class="p-4 border-b border-slate-700 flex-1 overflow-y-auto">
+                <h2 class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-3">Live Analysis</h2>
+                
+                <div class="bg-slate-800 p-3 rounded mb-4 border border-slate-700">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-400">Test Point S:</span>
+                        <span id="cursorS" class="font-mono text-yellow-400">-</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs text-slate-400">Total Angle:</span>
+                        <span id="cursorAngle" class="text-xl font-bold text-white">0°</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-slate-900 p-2 rounded">
+                        <span class="text-[10px] text-slate-500 uppercase">Stability</span>
+                        <span id="locusStatus" class="text-xs font-bold text-slate-500">OFF LOCUS</span>
+                    </div>
+                    <div class="mt-2 text-xs flex justify-between">
+                         <span class="text-slate-400">Gain (K):</span>
+                         <span id="gainVal" class="font-mono text-green-400">N/A</span>
+                    </div>
+                </div>
+
+                <div class="text-xs text-slate-500">
+                    <p class="mb-1"><strong>Instruction:</strong></p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>Drag S point to check angles.</li>
+                        <li>Drag Poles/Zeros to design.</li>
+                        <li><strong>Double Click</strong> on a Pole/Zero to <span class="text-red-400">REMOVE</span> it.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="p-4 border-t border-slate-700 bg-slate-800/30">
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="addEntity('zero')" class="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded text-xs font-bold transition">
+                        + Zero
+                    </button>
+                    <button onclick="addEntity('pole')" class="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white py-2 rounded text-xs font-bold transition">
+                        + Pole
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right: Visualization Workspace -->
+        <main class="flex-1 flex flex-col bg-slate-950 relative overflow-hidden">
+            
+            <div class="flex-1 relative bg-slate-950" id="canvasContainer">
+                
+                <!-- 1. ROOT LOCUS -->
+                <div id="view-rl" class="absolute inset-0 flex items-center justify-center view-panel">
+                    <canvas id="rlMapCanvas" class="absolute inset-0 w-full h-full"></canvas>
+                    <canvas id="rlGridCanvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+                    <canvas id="rlOverlayCanvas" class="absolute inset-0 w-full h-full cursor-crosshair"></canvas>
+                    <!-- Legend -->
+                    <div class="absolute top-4 right-4 bg-slate-900/90 p-3 rounded border border-slate-700 text-xs backdrop-blur pointer-events-none shadow-xl">
+                        <div class="font-bold text-slate-300 mb-1">Root Locus</div>
+                        <div class="flex items-center gap-2"><span class="w-3 h-0.5 bg-green-400"></span> Stable Region</div>
+                    </div>
+                </div>
+
+                <!-- 2. BODE PLOT -->
+                <div id="view-bode" class="absolute inset-0 flex flex-col p-4 gap-2 hidden view-panel">
+                    <div class="flex-1 bg-slate-900 rounded border border-slate-700 relative overflow-hidden">
+                        <canvas id="bodeMagCanvas" class="w-full h-full"></canvas>
+                        <span class="absolute top-2 left-2 text-[10px] font-bold text-blue-400 bg-slate-950/80 px-2 py-1 rounded border border-slate-800">Magnitude (dB)</span>
+                    </div>
+                    <div class="flex-1 bg-slate-900 rounded border border-slate-700 relative overflow-hidden">
+                        <canvas id="bodePhaseCanvas" class="w-full h-full"></canvas>
+                        <span class="absolute top-2 left-2 text-[10px] font-bold text-green-400 bg-slate-950/80 px-2 py-1 rounded border border-slate-800">Phase (deg)</span>
+                    </div>
+                </div>
+
+                <!-- 3. NYQUIST -->
+                <div id="view-nyquist" class="absolute inset-0 flex items-center justify-center p-4 hidden view-panel">
+                    <canvas id="nyquistCanvas" class="bg-slate-900 rounded-lg border border-slate-700 w-full h-full"></canvas>
+                    <div class="absolute top-6 right-6 text-xs text-slate-400 bg-slate-800/80 p-2 rounded pointer-events-none border border-slate-700">
+                        Nyquist Plot
+                    </div>
+                </div>
+
+                <!-- 4. NICHOLS -->
+                <div id="view-nichols" class="absolute inset-0 flex items-center justify-center p-4 hidden view-panel">
+                    <canvas id="nicholsCanvas" class="bg-slate-900 rounded-lg border border-slate-700 w-full h-full"></canvas>
+                    <div class="absolute top-6 right-6 text-xs text-slate-400 bg-slate-800/80 p-2 rounded pointer-events-none border border-slate-700">
+                        Nichols Chart (Open Loop)
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Bottom Tabs -->
+            <div class="h-10 bg-slate-900 border-t border-slate-800 flex justify-center items-end gap-1 px-4 shrink-0 z-20 overflow-x-auto">
+                <button onclick="switchTab('rl')" id="tab-rl" class="tab-btn active w-32 whitespace-nowrap">Root Locus</button>
+                <button onclick="switchTab('bode')" id="tab-bode" class="tab-btn w-32 whitespace-nowrap">Bode Plot</button>
+                <button onclick="switchTab('nyquist')" id="tab-nyquist" class="tab-btn w-32 whitespace-nowrap">Nyquist Plot</button>
+                <button onclick="switchTab('nichols')" id="tab-nichols" class="tab-btn w-32 whitespace-nowrap">Nichols Chart</button>
+            </div>
+
+        </main>
+    </div>
+
+<script>
+    // --- Math Utils ---
+    class Complex {
+        constructor(re, im) { this.re = re; this.im = im; }
+        add(c) { return new Complex(this.re + c.re, this.im + c.im); }
+        sub(c) { return new Complex(this.re - c.re, this.im - c.im); }
+        mul(c) { return new Complex(this.re * c.re - this.im * c.im, this.re * c.im + this.im * c.re); }
+        div(c) {
+            const d = c.re**2 + c.im**2;
+            return new Complex((this.re*c.re + this.im*c.im)/d, (this.im*c.re - this.re*c.im)/d);
+        }
+        mag() { return Math.sqrt(this.re**2 + this.im**2); }
+        phase() { return Math.atan2(this.im, this.re); }
+        phaseDeg() { return this.phase() * (180 / Math.PI); }
+    }
+
+    // --- State ---
+    let poles = [new Complex(0, 0), new Complex(-2, 0), new Complex(-1, 2)];
+    let zeros = [];
+    let activeTab = 'rl';
+    
+    // Viewport Scalers
+    const RL_SCALE = 45; 
+    let rlCenterX = 0, rlCenterY = 0;
+    
+    let mouseLoc = new Complex(-1.5, 1);
+    let dragTarget = null;
+
+    // Canvases
+    const mapCanvas = document.getElementById('rlMapCanvas');
+    const gridCanvas = document.getElementById('rlGridCanvas');
+    const overlayCanvas = document.getElementById('rlOverlayCanvas');
+    const bodeMagCanvas = document.getElementById('bodeMagCanvas');
+    const bodePhaseCanvas = document.getElementById('bodePhaseCanvas');
+    const nyquistCanvas = document.getElementById('nyquistCanvas');
+    const nicholsCanvas = document.getElementById('nicholsCanvas');
+
+    // --- Core Funcs ---
+    function evalOpenLoop(s) {
+        let num = new Complex(1,0);
+        let den = new Complex(1,0);
+        for(let z of zeros) num = num.mul(s.sub(z));
+        for(let p of poles) den = den.mul(s.sub(p));
+        if(den.mag()===0) return new Complex(Infinity, Infinity);
+        return num.div(den);
+    }
+
+    // --- Resizing ---
+    function resize() {
+        const container = document.getElementById('canvasContainer');
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+
+        [mapCanvas, gridCanvas, overlayCanvas, nyquistCanvas, nicholsCanvas].forEach(c => { c.width = w; c.height = h; });
+        
+        const bw = w - 32; const bh = (h - 40) / 2;
+        bodeMagCanvas.width = bw; bodeMagCanvas.height = bh;
+        bodePhaseCanvas.width = bw; bodePhaseCanvas.height = bh;
+
+        rlCenterX = w / 2 + 50;
+        rlCenterY = h / 2;
+
+        renderAll();
+    }
+    window.addEventListener('resize', resize);
+
+
+    // --- RENDERING: ROOT LOCUS ---
+    function drawRootLocusMap() {
+        const ctx = mapCanvas.getContext('2d');
+        const w = mapCanvas.width; const h = mapCanvas.height;
+        ctx.clearRect(0,0,w,h);
+        
+        // Pixel scan logic for high res RL
+        const imgData = ctx.createImageData(w, h);
+        const data = imgData.data;
+
+        for (let y = 0; y < h; y+=2) { // Step 2 optimization
+            const sy = (rlCenterY - y) / RL_SCALE;
+            for (let x = 0; x < w; x+=2) {
+                const sx = (x - rlCenterX) / RL_SCALE;
+                
+                let totalAngle = 0;
+                for(let z of zeros) totalAngle += Math.atan2(sy - z.im, sx - z.re);
+                for(let p of poles) totalAngle -= Math.atan2(sy - p.im, sx - p.re);
+                
+                let phase = totalAngle / Math.PI; 
+                let check = (phase - 1) / 2;
+                let dist = Math.abs(check - Math.round(check));
+                
+                if (dist < 0.03) {
+                    const idx = (y * w + x) * 4;
+                    // Draw 2x2 block
+                    for(let dy=0; dy<2; dy++) {
+                        for(let dx=0; dx<2; dx++) {
+                            if(x+dx < w && y+dy < h) {
+                                const i = ((y+dy) * w + (x+dx)) * 4;
+                                data[i] = 74; data[i+1] = 222; data[i+2] = 128; data[i+3] = 255; 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+    }
+
+    function drawGridAndComponents() {
+        const ctx = gridCanvas.getContext('2d');
+        const w = gridCanvas.width; const h = gridCanvas.height;
+        ctx.clearRect(0,0,w,h);
+
+        // Grid
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+        // Verts
+        for(let x = rlCenterX%RL_SCALE; x < w; x+=RL_SCALE) {
+             ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+             // Label
+             let val = (x - rlCenterX)/RL_SCALE;
+             if(Math.abs(val) > 0.1) {
+                 ctx.fillStyle = '#475569'; ctx.font="10px sans-serif"; 
+                 ctx.fillText(val.toFixed(0), x+2, rlCenterY+12);
+             }
+        }
+        // Horiz
+        for(let y = rlCenterY%RL_SCALE; y < h; y+=RL_SCALE) {
+             ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+             let val = (rlCenterY - y)/RL_SCALE;
+             if(Math.abs(val) > 0.1) {
+                 ctx.fillStyle = '#475569'; ctx.font="10px sans-serif"; 
+                 ctx.fillText("j"+val.toFixed(0), rlCenterX+2, y-2);
+             }
+        }
+
+        // Axes
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, rlCenterY); ctx.lineTo(w, rlCenterY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rlCenterX, 0); ctx.lineTo(rlCenterX, h); ctx.stroke();
+
+        // Components
+        zeros.forEach(z => drawEntity(ctx, z, 'zero'));
+        poles.forEach(p => drawEntity(ctx, p, 'pole'));
+    }
+
+    function drawEntity(ctx, pos, type) {
+        const x = rlCenterX + pos.re * RL_SCALE;
+        const y = rlCenterY - pos.im * RL_SCALE;
+        ctx.lineWidth = 2;
+        if(type === 'zero') {
+            ctx.strokeStyle = '#3b82f6';
+            ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; ctx.fill();
+        } else {
+            ctx.strokeStyle = '#a855f7';
+            const s = 5;
+            ctx.beginPath(); 
+            ctx.moveTo(x-s, y-s); ctx.lineTo(x+s, y+s);
+            ctx.moveTo(x+s, y-s); ctx.lineTo(x-s, y+s);
+            ctx.stroke();
+        }
+    }
+
+    // --- RENDERING: NYQUIST ---
+    function drawNyquist() {
+        const ctx = nyquistCanvas.getContext('2d');
+        const w = nyquistCanvas.width; const h = nyquistCanvas.height;
+        const cx = w/2; const cy = h/2;
+        const scale = 50; // Pixels per unit
+
+        ctx.clearRect(0,0,w,h);
+        
+        // Grid & Axes
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+        for(let x=cx%scale; x<w; x+=scale) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+        for(let y=cy%scale; y<h; y+=scale) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+        
+        ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+
+        // Labels
+        ctx.fillStyle = '#64748b'; ctx.font = "10px sans-serif";
+        for(let x=cx+scale; x<w; x+=scale) ctx.fillText(((x-cx)/scale).toFixed(0), x, cy+15);
+        for(let x=cx-scale; x>0; x-=scale) ctx.fillText(((x-cx)/scale).toFixed(0), x, cy+15);
+        for(let y=cy-scale; y>0; y-=scale) ctx.fillText("j"+((cy-y)/scale).toFixed(0), cx+5, y);
+
+        // Critical Point
+        ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(cx - scale, cy, 4, 0, Math.PI*2); ctx.fill();
+        ctx.fillText("-1", cx - scale - 5, cy + 15);
+
+        // Plot Logic
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fbbf24'; // Amber
+        
+        const path = [];
+        // Logarithmic sweep for better range
+        for (let i = -300; i < 300; i++) {
+             let wVal = Math.pow(10, i/50); // 10^-6 to 10^6
+             path.push({w: wVal, val: evalOpenLoop(new Complex(0, wVal))});
+        }
+
+        // Draw +w
+        ctx.beginPath();
+        let started = false;
+        path.forEach(p => {
+             const px = cx + p.val.re * scale;
+             const py = cy - p.val.im * scale; // Flip Y
+             // Clamp visual range to avoid insane lines
+             if(Math.abs(px-cx) < w && Math.abs(py-cy) < h) {
+                if(!started) { ctx.moveTo(px,py); started=true; }
+                else ctx.lineTo(px,py);
+             } else { started = false; }
+        });
+        ctx.stroke();
+
+        // Draw -w (Mirror)
+        ctx.beginPath();
+        ctx.setLineDash([4,4]);
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+        started = false;
+        path.forEach(p => {
+             const px = cx + p.val.re * scale;
+             const py = cy - (-p.val.im) * scale; // Conjugate
+             if(Math.abs(px-cx) < w && Math.abs(py-cy) < h) {
+                if(!started) { ctx.moveTo(px,py); started=true; }
+                else ctx.lineTo(px,py);
+             } else { started = false; }
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // --- RENDERING: NICHOLS ---
+    function drawNichols() {
+        const ctx = nicholsCanvas.getContext('2d');
+        const w = nicholsCanvas.width; const h = nicholsCanvas.height;
+        ctx.clearRect(0,0,w,h);
+
+        // Range: Phase -360 to 0, Mag -60dB to 40dB
+        const xMin = -360, xMax = 0;
+        const yMin = -60, yMax = 40;
+        
+        const mapX = (deg) => (deg - xMin)/(xMax - xMin) * w;
+        const mapY = (db) => h - (db - yMin)/(yMax - yMin) * h;
+
+        // Grid
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.fillStyle = '#334155'; ctx.font="10px sans-serif";
+        // Phase lines (every 45 deg)
+        for(let p = xMin; p <= xMax; p+=45) {
+            let x = mapX(p);
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            ctx.fillText(p+"°", x+2, h-5);
+        }
+        // Mag lines (every 20 dB)
+        for(let m = yMin; m <= yMax; m+=20) {
+            let y = mapY(m);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            ctx.fillText(m+"dB", 5, y-2);
+        }
+        
+        // Critical Point (-180, 0dB)
+        let cx = mapX(-180); let cy = mapY(0);
+        ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
+
+        // Plot
+        ctx.strokeStyle = '#34d399'; // Emerald
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        
+        for (let i = -300; i < 300; i++) {
+             let wVal = Math.pow(10, i/50);
+             let gh = evalOpenLoop(new Complex(0, wVal));
+             let mag = 20 * Math.log10(gh.mag());
+             let ph = gh.phaseDeg();
+             
+             // Normalize phase to -360 to 0 mostly
+             while(ph > 0) ph -= 360;
+             while(ph < -360) ph += 360;
+             
+             let px = mapX(ph);
+             let py = mapY(mag);
+
+             if(px >= 0 && px <= w && py >= 0 && py <= h) {
+                 if(!started) { ctx.moveTo(px, py); started = true; }
+                 else ctx.lineTo(px, py);
+             } else {
+                 started = false;
+             }
+        }
+        ctx.stroke();
+    }
+    
+    // --- RENDERING: BODE (Refined) ---
+    function drawBode() {
+        const magCtx = bodeMagCanvas.getContext('2d');
+        const phCtx = bodePhaseCanvas.getContext('2d');
+        const w = bodeMagCanvas.width; const h = bodeMagCanvas.height;
+        
+        magCtx.clearRect(0,0,w,h); phCtx.clearRect(0,0,w,h);
+        
+        // Draw Grids (Simplified)
+        [magCtx, phCtx].forEach(ctx => {
+             ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+             for(let i=0; i<4; i++) { let x = i*(w/4); ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+             ctx.beginPath(); ctx.moveTo(0,h/2); ctx.lineTo(w,h/2); ctx.stroke();
+        });
+
+        magCtx.beginPath(); magCtx.strokeStyle='#60a5fa'; magCtx.lineWidth=2;
+        phCtx.beginPath(); phCtx.strokeStyle='#4ade80'; phCtx.lineWidth=2;
+
+        for(let x=0; x<w; x++) {
+            // Map x to freq 0.1 to 100
+            let t = x/w;
+            let freq = Math.pow(10, -1 + t*3); // 10^-1 to 10^2
+            let gh = evalOpenLoop(new Complex(0, freq));
+            
+            let db = 20*Math.log10(gh.mag());
+            let ph = gh.phaseDeg();
+            
+            // Map Y
+            let yMag = h/2 - (db/100)*h; // approx scale
+            let yPh = h/2 - (ph/360)*h;
+
+            if(x===0) { magCtx.moveTo(x, yMag); phCtx.moveTo(x, yPh); }
+            else { magCtx.lineTo(x, yMag); phCtx.lineTo(x, yPh); }
+        }
+        magCtx.stroke(); phCtx.stroke();
+    }
+
+
+    // --- Interactions ---
+    function getMousePos(e, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        return { 
+            c: {x, y}, 
+            l: new Complex((x - rlCenterX)/RL_SCALE, (rlCenterY - y)/RL_SCALE) 
+        };
+    }
+
+    // Drag Logic
+    overlayCanvas.addEventListener('mousedown', e => {
+        const p = getMousePos(e, overlayCanvas);
+        const hitR = 0.4;
+        
+        // Check Zeros
+        for(let i=0; i<zeros.length; i++) {
+            if(Math.sqrt((p.l.re-zeros[i].re)**2 + (p.l.im-zeros[i].im)**2) < hitR) {
+                dragTarget = {type:'zero', i}; return;
+            }
+        }
+        // Check Poles
+        for(let i=0; i<poles.length; i++) {
+            if(Math.sqrt((p.l.re-poles[i].re)**2 + (p.l.im-poles[i].im)**2) < hitR) {
+                dragTarget = {type:'pole', i}; return;
+            }
+        }
+        // Else Move S
+        mouseLoc = p.l;
+        drawOverlay();
+    });
+
+    window.addEventListener('mousemove', e => {
+        if(activeTab !== 'rl') return;
+        
+        const rect = overlayCanvas.getBoundingClientRect();
+        // Only trigger if inside or dragging
+        if(dragTarget || (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom)) {
+             const p = getMousePos(e, overlayCanvas);
+             
+             if(dragTarget) {
+                let sx = Math.round(p.l.re * 10) / 10;
+                let sy = Math.round(p.l.im * 10) / 10;
+                if(Math.abs(sy)<0.2) sy=0;
+                
+                if(dragTarget.type==='zero') zeros[dragTarget.i] = new Complex(sx,sy);
+                else poles[dragTarget.i] = new Complex(sx,sy);
+                
+                renderAll();
+             } else {
+                mouseLoc = p.l;
+                drawOverlay();
+             }
+        }
+    });
+
+    window.addEventListener('mouseup', () => dragTarget = null);
+    
+    // Double Click to Remove - Fixed Logic
+    overlayCanvas.addEventListener('dblclick', e => {
+         // Stop other events
+         e.preventDefault(); e.stopPropagation();
+         
+         const p = getMousePos(e, overlayCanvas);
+         const hitR = 0.5; // Slightly larger hit radius
+         
+         let removed = false;
+         for(let i=0; i<zeros.length; i++) {
+            if(Math.sqrt((p.l.re-zeros[i].re)**2 + (p.l.im-zeros[i].im)**2) < hitR) {
+                zeros.splice(i,1); removed=true; break;
+            }
+        }
+        if(!removed) {
+            for(let i=0; i<poles.length; i++) {
+                if(Math.sqrt((p.l.re-poles[i].re)**2 + (p.l.im-poles[i].im)**2) < hitR) {
+                    poles.splice(i,1); removed=true; break;
+                }
+            }
+        }
+        
+        if(removed) {
+            dragTarget = null; // Clear drag state just in case
+            renderAll();
+        }
+    });
+
+    // --- Overlay Vector Drawing ---
+    function drawOverlay() {
+        const ctx = overlayCanvas.getContext('2d');
+        const w = overlayCanvas.width; const h = overlayCanvas.height;
+        ctx.clearRect(0,0,w,h);
+
+        // Draw S
+        const mx = rlCenterX + mouseLoc.re * RL_SCALE;
+        const my = rlCenterY - mouseLoc.im * RL_SCALE;
+        
+        // Vectors
+        let angSum = 0;
+        zeros.forEach(z => {
+             drawVector(ctx, z, mouseLoc, '#3b82f6');
+             angSum += Math.atan2(mouseLoc.im - z.im, mouseLoc.re - z.re);
+        });
+        poles.forEach(p => {
+             drawVector(ctx, p, mouseLoc, '#a855f7');
+             angSum -= Math.atan2(mouseLoc.im - p.im, mouseLoc.re - p.re);
+        });
+
+        // S Point
+        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(mx, my, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font="bold 12px sans-serif"; ctx.fillText("S", mx+8, my-5);
+
+        // Update Stats
+        let deg = angSum * (180/Math.PI);
+        let normDeg = deg % 360;
+        if(normDeg > 180) normDeg -= 360;
+        if(normDeg <= -180) normDeg += 360;
+        
+        document.getElementById('cursorAngle').innerText = normDeg.toFixed(1) + "°";
+        document.getElementById('cursorS').innerText = mouseLoc.re.toFixed(2) + " + j" + mouseLoc.im.toFixed(2);
+        
+        const onLocus = Math.abs(Math.abs(normDeg)-180) < 5;
+        const stat = document.getElementById('locusStatus');
+        if(onLocus) {
+            stat.innerText = "ON LOCUS"; stat.className = "text-xs font-bold text-green-400";
+            let num=1, den=1;
+            zeros.forEach(z => num *= Math.sqrt((mouseLoc.re-z.re)**2 + (mouseLoc.im-z.im)**2));
+            poles.forEach(p => den *= Math.sqrt((mouseLoc.re-p.re)**2 + (mouseLoc.im-p.im)**2));
+            document.getElementById('gainVal').innerText = (den/num).toFixed(3);
+        } else {
+            stat.innerText = "OFF LOCUS"; stat.className = "text-xs font-bold text-slate-500";
+            document.getElementById('gainVal').innerText = "N/A";
+        }
+    }
+
+    function drawVector(ctx, fromLog, toLog, color) {
+        const x1 = rlCenterX + fromLog.re * RL_SCALE;
+        const y1 = rlCenterY - fromLog.im * RL_SCALE;
+        const x2 = rlCenterX + toLog.re * RL_SCALE;
+        const y2 = rlCenterY - toLog.im * RL_SCALE;
+        
+        ctx.beginPath(); ctx.strokeStyle = color; ctx.setLineDash([2,2]); ctx.lineWidth=1;
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // --- Global Controls ---
+    function addEntity(t) {
+        if(t==='zero') zeros.push(new Complex(-3, 0));
+        else poles.push(new Complex(-3, 0));
+        renderAll();
+    }
+    
+    function updateEquation() {
+        let n = zeros.length ? zeros.map(z=>`(s${z.re>=0?'-':'+'}${Math.abs(z.re)})`).join('') : "1";
+        let d = poles.length ? poles.map(p=>`(s${p.re>=0?'-':'+'}${Math.abs(p.re)})`).join('') : "1";
+        document.getElementById('tfEquation').innerHTML = `<div class="text-center"><div class="border-b border-white mb-1 pb-1">${n}</div><div>${d}</div></div>`;
+    }
+
+    function switchTab(t) {
+        activeTab = t;
+        document.querySelectorAll('.view-panel').forEach(v => v.classList.add('hidden'));
+        document.getElementById(`view-${t}`).classList.remove('hidden');
+        if(t==='bode') document.getElementById(`view-${t}`).classList.add('flex');
+        
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`tab-${t}`).classList.add('active');
+        
+        renderAll();
+    }
+
+    function renderAll() {
+        updateEquation();
+        if(activeTab==='rl') { drawRootLocusMap(); drawGridAndComponents(); drawOverlay(); }
+        else if(activeTab==='bode') drawBode();
+        else if(activeTab==='nyquist') drawNyquist();
+        else if(activeTab==='nichols') drawNichols();
+    }
+
+    // Init
+    setTimeout(resize, 100);
+
+</script>
+</body>
+</html>

@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Local Toolset (JS Version)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Required Libraries for Offline/Client-side work -->
+    <!-- PDF Manipulation -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <!-- Image to PDF & Text to PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- File Saver -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .tool-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            transition: all 0.3s;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .tool-card:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            border-color: #3b82f6; 
+        }
+        .btn-action {
+            background: #2563eb; color: white; padding: 10px;
+            border-radius: 8px; width: 100%; margin-top: 15px;
+            font-weight: 600; transition: background 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-action:hover { background: #1d4ed8; }
+        .btn-action:disabled { background: #94a3b8; cursor: not-allowed; }
+        .icon-box {
+            width: 45px; height: 45px; display: flex;
+            align-items: center; justify-content: center;
+            border-radius: 10px; margin-bottom: 15px; font-size: 22px;
+        }
+        input, textarea, select { width: 100%; border: 1px solid #cbd5e1; padding: 8px; border-radius: 6px; margin-bottom: 5px; }
+        .hidden-canvas { display: none; }
+        #qr-result { margin-top: 10px; display: flex; justify-content: center; }
+        .result-box { background: #f1f5f9; padding: 10px; border-radius: 6px; margin-top: 10px; font-weight: bold; text-align: center; font-size: 0.9em; color: #334155; }
+    </style>
+</head>
+<body class="p-6 md:p-10">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-extrabold text-slate-800">My Local Toolset (JS)</h1>
+            <p class="text-slate-500 mt-2">100% Browser Based - No Python Needed</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<nav style="background: #222; padding: 10px; text-align: center;">
+    <a href="index.html" style="color: white; margin: 10px; text-decoration: none;">Home</a>
+    <a href="about.html" style="color: white; margin: 10px; text-decoration: none;">About</a>
+    <a href="contact.html" style="color: white; margin: 10px; text-decoration: none;">Contact</a>
+    <a href="project.html" style="color: white; margin: 10px; text-decoration: none;">Project</a>
+</nav>
+            
+            <!-- NEW TOOL: Smart List Maker / Hand Bill -->
+            <div class="tool-card border-t-4 border-indigo-600">
+                <div>
+                    <div class="icon-box bg-indigo-100 text-indigo-700">📋</div>
+                    <h3 class="text-lg font-bold text-slate-800">Smart List Maker</h3>
+                    <p class="text-slate-500 text-sm mb-3">Create list/hand bill instantly.</p>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-500 font-bold">Headline / Title:</label>
+                    <input type="text" id="list-headline" placeholder="e.g. Bazar List / Member List" class="font-bold">
+                    
+                    <label class="text-xs text-slate-500 font-bold mt-2 block">List Items (One per line):</label>
+                    <textarea id="list-items" rows="5" placeholder="1. Item One&#10;2. Item Two&#10;3. Item Three" class="text-sm"></textarea>
+                    
+                    <button onclick="generateListPDF()" class="btn-action bg-indigo-600">Download List PDF</button>
+                </div>
+            </div>
+
+
+            <!-- Existing: LaTeX Cleaner -->
+            <div class="tool-card border-t-4 border-indigo-800">
+                <div>
+                    <div class="icon-box bg-indigo-100 text-indigo-800">🧹</div>
+                    <h3 class="text-lg font-bold text-slate-800">LaTeX Cleaner</h3>
+                    <p class="text-slate-500 text-sm mb-3">Strip commands & save as Doc.</p>
+                </div>
+                <div>
+                    <textarea id="latex-input" rows="2" placeholder="Paste LaTeX code here..."></textarea>
+                    <button onclick="cleanLatexToDoc()" class="btn-action bg-indigo-800">Clean & Save .doc</button>
+                </div>
+            </div>
+
+            <!-- Existing: LaTeX Source to PDF -->
+            <div class="tool-card border-t-4 border-red-700">
+                <div>
+                    <div class="icon-box bg-red-100 text-red-700">📜</div>
+                    <h3 class="text-lg font-bold text-slate-800">LaTeX Source PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Print .tex code to PDF.</p>
+                </div>
+                <div>
+                    <input type="file" id="latex-file" accept=".tex,.txt" class="text-sm">
+                    <button onclick="latexSourceToPDF()" class="btn-action bg-red-700">Save Code to PDF</button>
+                </div>
+            </div>
+
+            <!-- Existing: Number to Words -->
+            <div class="tool-card border-t-4 border-green-500">
+                <div>
+                    <div class="icon-box bg-green-100 text-green-700">🔡</div>
+                    <h3 class="text-lg font-bold text-slate-800">Number to Words</h3>
+                    <p class="text-slate-500 text-sm mb-3">For Cheques & Deeds.</p>
+                </div>
+                <div>
+                    <input type="number" id="num-input" placeholder="e.g. 1500" class="text-sm">
+                    <button onclick="convertNumToWords()" class="btn-action bg-green-600">Convert</button>
+                    <div id="num-result" class="result-box hidden"></div>
+                </div>
+            </div>
+
+             <!-- Existing: Text Case Converter -->
+             <div class="tool-card border-t-4 border-fuchsia-500">
+                <div>
+                    <div class="icon-box bg-fuchsia-100 text-fuchsia-700">Aa</div>
+                    <h3 class="text-lg font-bold text-slate-800">Case Converter</h3>
+                    <p class="text-slate-500 text-sm mb-3">Fix text capitalization.</p>
+                </div>
+                <div>
+                    <textarea id="case-text" rows="2" placeholder="Enter text..."></textarea>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="changeCase('upper')" class="bg-gray-200 p-2 rounded text-xs w-1/3 hover:bg-gray-300">UPPER</button>
+                        <button onclick="changeCase('lower')" class="bg-gray-200 p-2 rounded text-xs w-1/3 hover:bg-gray-300">lower</button>
+                        <button onclick="changeCase('title')" class="bg-gray-200 p-2 rounded text-xs w-1/3 hover:bg-gray-300">Title</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Existing: Age Calculator -->
+            <div class="tool-card border-t-4 border-lime-500">
+                <div>
+                    <div class="icon-box bg-lime-100 text-lime-700">📅</div>
+                    <h3 class="text-lg font-bold text-slate-800">Age Calculator</h3>
+                    <p class="text-slate-500 text-sm mb-3">Calculate exact age for forms.</p>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-500">Date of Birth:</label>
+                    <input type="date" id="age-dob" class="text-sm">
+                    <label class="text-xs text-slate-500">Calculate as of (Optional):</label>
+                    <input type="date" id="age-target" class="text-sm">
+                    <button onclick="calculateAge()" class="btn-action bg-lime-600">Calculate Age</button>
+                    <div id="age-result" class="result-box hidden"></div>
+                </div>
+            </div>
+
+            <!-- Existing: Rotate PDF -->
+            <div class="tool-card border-t-4 border-sky-500">
+                <div>
+                    <div class="icon-box bg-sky-100 text-sky-700">🔄</div>
+                    <h3 class="text-lg font-bold text-slate-800">Rotate PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Fix upside-down scans.</p>
+                </div>
+                <div>
+                    <input type="file" id="rotate-file" accept=".pdf" class="text-sm mb-2">
+                    <select id="rotate-angle" class="text-sm">
+                        <option value="90">Rotate 90° Clockwise</option>
+                        <option value="180">Rotate 180° (Upside Down)</option>
+                        <option value="270">Rotate 270° Counter-Clockwise</option>
+                    </select>
+                    <button onclick="rotatePDF()" class="btn-action bg-sky-600">Rotate & Save</button>
+                </div>
+            </div>
+
+            <!-- Existing: Image KB Reducer -->
+            <div class="tool-card border-t-4 border-amber-500">
+                <div>
+                    <div class="icon-box bg-amber-100 text-amber-700">📉</div>
+                    <h3 class="text-lg font-bold text-slate-800">Reduce Image Size</h3>
+                    <p class="text-slate-500 text-sm mb-3">Lower KB without resizing.</p>
+                </div>
+                <div>
+                    <input type="file" id="reduce-file" accept="image/*" class="text-sm mb-2">
+                    <label class="text-xs text-slate-500">Quality Level:</label>
+                    <select id="reduce-quality" class="text-sm">
+                        <option value="0.9">90% (High Quality)</option>
+                        <option value="0.7" selected>70% (Medium - Recommended)</option>
+                        <option value="0.5">50% (Low - Small Size)</option>
+                        <option value="0.3">30% (Very Low)</option>
+                    </select>
+                    <button onclick="reduceImageSize()" class="btn-action bg-amber-600">Reduce Size</button>
+                </div>
+            </div>
+
+            <!-- Existing: ID Card Joiner -->
+            <div class="tool-card border-t-4 border-emerald-600">
+                <div>
+                    <div class="icon-box bg-emerald-100 text-emerald-700">🆔</div>
+                    <h3 class="text-lg font-bold text-slate-800">ID Card Joiner</h3>
+                    <p class="text-slate-500 text-sm mb-3">Front & Back on 1 Page.</p>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500">Front Side:</label>
+                    <input type="file" id="id-front" accept="image/*" class="text-sm mb-2">
+                    <label class="text-xs font-bold text-slate-500">Back Side:</label>
+                    <input type="file" id="id-back" accept="image/*" class="text-sm">
+                    <button onclick="createIDCardPDF()" class="btn-action bg-emerald-600">Make PDF</button>
+                </div>
+            </div>
+
+            <!-- Existing: Passport Photo Sheet -->
+            <div class="tool-card border-t-4 border-violet-600">
+                <div>
+                    <div class="icon-box bg-violet-100 text-violet-700">📸</div>
+                    <h3 class="text-lg font-bold text-slate-800">Passport Sheet</h3>
+                    <p class="text-slate-500 text-sm mb-3">6 copies on printable page.</p>
+                </div>
+                <div>
+                    <input type="file" id="pp-photo" accept="image/*" class="text-sm">
+                    <button onclick="createPassportSheet()" class="btn-action bg-violet-600">Generate Sheet</button>
+                </div>
+            </div>
+
+            <!-- Existing: Custom Resizer -->
+            <div class="tool-card border-t-4 border-rose-500">
+                <div>
+                    <div class="icon-box bg-rose-100 text-rose-600">📐</div>
+                    <h3 class="text-lg font-bold text-slate-800">Custom Resizer</h3>
+                    <p class="text-slate-500 text-sm mb-3">Resize by pixels.</p>
+                </div>
+                <div>
+                    <input type="file" id="resize-file" accept="image/*" class="text-sm mb-2">
+                    <div class="flex gap-2">
+                        <input type="number" id="resize-w" placeholder="Width" class="w-1/2">
+                        <input type="number" id="resize-h" placeholder="Height" class="w-1/2">
+                    </div>
+                    <button onclick="customResize()" class="btn-action bg-rose-600">Resize Now</button>
+                </div>
+            </div>
+
+            <!-- Existing: Protect PDF -->
+            <div class="tool-card border-t-4 border-slate-700">
+                <div>
+                    <div class="icon-box bg-slate-100 text-slate-700">🔒</div>
+                    <h3 class="text-lg font-bold text-slate-800">Protect PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Add password to PDF.</p>
+                </div>
+                <div>
+                    <input type="file" id="protect-file" accept=".pdf" class="text-sm mb-2">
+                    <input type="password" id="protect-pass" placeholder="Set Password" class="text-sm">
+                    <button onclick="protectPDF()" class="btn-action bg-slate-700">Lock PDF</button>
+                </div>
+            </div>
+
+            <!-- Existing: WebP to JPG -->
+            <div class="tool-card border-t-4 border-cyan-500">
+                <div>
+                    <div class="icon-box bg-cyan-100 text-cyan-600">🖼️</div>
+                    <h3 class="text-lg font-bold text-slate-800">WebP to JPG</h3>
+                    <p class="text-slate-500 text-sm mb-3">Fix 'WebP' format issues.</p>
+                </div>
+                <div>
+                    <input type="file" id="webp-file" accept="image/webp" class="text-sm">
+                    <button onclick="convertWebPtoJPG()" class="btn-action bg-cyan-600">Convert to JPG</button>
+                </div>
+            </div>
+
+            <!-- Existing: Black & White Filter -->
+            <div class="tool-card border-t-4 border-gray-500">
+                <div>
+                    <div class="icon-box bg-gray-200 text-gray-700">📠</div>
+                    <h3 class="text-lg font-bold text-slate-800">Make B&W</h3>
+                    <p class="text-slate-500 text-sm mb-3">Grayscale for printing.</p>
+                </div>
+                <div>
+                    <input type="file" id="bw-file" accept="image/*" class="text-sm">
+                    <button onclick="makeGrayscale()" class="btn-action bg-gray-600">Convert B&W</button>
+                </div>
+            </div>
+
+            <!-- Existing: Split PDF -->
+            <div class="tool-card border-t-4 border-red-500">
+                <div>
+                    <div class="icon-box bg-red-100 text-red-600">✂️</div>
+                    <h3 class="text-lg font-bold text-slate-800">Split PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Extract pages (e.g., 1, 3-5).</p>
+                </div>
+                <div>
+                    <input type="file" id="split-file" accept=".pdf" class="text-sm">
+                    <div class="flex gap-2">
+                        <input type="number" id="split-start" placeholder="Start" min="1" class="w-1/2">
+                        <input type="number" id="split-end" placeholder="End" min="1" class="w-1/2">
+                    </div>
+                    <button onclick="splitPDF()" class="btn-action bg-red-600">Extract Pages</button>
+                </div>
+            </div>
+
+            <!-- Existing: Compress PDF -->
+            <div class="tool-card border-t-4 border-orange-500">
+                <div>
+                    <div class="icon-box bg-orange-100 text-orange-600">🗜️</div>
+                    <h3 class="text-lg font-bold text-slate-800">Compress PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Optimize PDF structure.</p>
+                </div>
+                <div>
+                    <input type="file" id="compress-file" accept=".pdf" class="text-sm">
+                    <button onclick="compressPDF()" class="btn-action bg-orange-600">Compress & Save</button>
+                </div>
+            </div>
+
+            <!-- Existing: Text to PDF -->
+            <div class="tool-card border-t-4 border-blue-800">
+                <div>
+                    <div class="icon-box bg-blue-100 text-blue-800">📄</div>
+                    <h3 class="text-lg font-bold text-slate-800">Text to PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Type text and save as PDF.</p>
+                </div>
+                <div>
+                    <textarea id="text-content" rows="3" placeholder="Type your content here..."></textarea>
+                    <button onclick="textToPDF()" class="btn-action bg-blue-800">Save as PDF</button>
+                </div>
+            </div>
+
+            <!-- Existing: Watermark PDF -->
+            <div class="tool-card border-t-4 border-teal-500">
+                <div>
+                    <div class="icon-box bg-teal-100 text-teal-600">©</div>
+                    <h3 class="text-lg font-bold text-slate-800">Watermark PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Add text stamp to center.</p>
+                </div>
+                <div>
+                    <input type="file" id="watermark-file" accept=".pdf" class="text-sm mb-2">
+                    <input type="text" id="watermark-text" placeholder="e.g. CONFIDENTIAL" class="text-sm">
+                    <button onclick="watermarkPDF()" class="btn-action bg-teal-600">Add Watermark</button>
+                </div>
+            </div>
+
+            <!-- Existing: QR Code Generator -->
+            <div class="tool-card border-t-4 border-yellow-500">
+                <div>
+                    <div class="icon-box bg-yellow-100 text-yellow-600">📱</div>
+                    <h3 class="text-lg font-bold text-slate-800">QR Code Maker</h3>
+                    <p class="text-slate-500 text-sm mb-3">Instant QR generation.</p>
+                </div>
+                <div>
+                    <input type="text" id="qr-text" placeholder="Enter Link or Text..." required>
+                    <div id="qr-result"></div>
+                    <button onclick="generateQR()" class="btn-action bg-yellow-600">Generate QR</button>
+                </div>
+            </div>
+
+            <!-- Existing: Job Photo Converter -->
+            <div class="tool-card border-t-4 border-blue-500">
+                <div>
+                    <div class="icon-box bg-blue-100 text-blue-600">👤</div>
+                    <h3 class="text-lg font-bold text-slate-800">Job Photo</h3>
+                    <p class="text-slate-500 text-sm mb-3">300x300 px | JPG</p>
+                </div>
+                <div>
+                    <input type="file" id="job-photo-file" accept="image/*" class="text-sm">
+                    <button onclick="processImage(300, 300, 'job-photo.jpg')" class="btn-action bg-blue-600">Convert Photo</button>
+                </div>
+            </div>
+
+            <!-- Existing: Signature Converter -->
+            <div class="tool-card border-t-4 border-indigo-500">
+                <div>
+                    <div class="icon-box bg-indigo-100 text-indigo-600">✍️</div>
+                    <h3 class="text-lg font-bold text-slate-800">Signature</h3>
+                    <p class="text-slate-500 text-sm mb-3">300x80 px | JPG</p>
+                </div>
+                <div>
+                    <input type="file" id="sign-photo-file" accept="image/*" class="text-sm">
+                    <button onclick="processImage(300, 80, 'signature.jpg')" class="btn-action bg-indigo-600">Convert Sign</button>
+                </div>
+            </div>
+
+            <!-- Existing: PDF Merger -->
+            <div class="tool-card">
+                <div>
+                    <div class="icon-box bg-gray-100 text-gray-600">📚</div>
+                    <h3 class="text-lg font-bold text-slate-800">PDF Merger</h3>
+                    <p class="text-slate-500 text-sm mb-3">Combine multiple PDFs.</p>
+                </div>
+                <div>
+                    <input type="file" id="merge-files" multiple accept=".pdf" class="text-sm">
+                    <button onclick="mergePDFs()" class="btn-action bg-gray-600">Merge Files</button>
+                </div>
+            </div>
+
+            <!-- Existing: Image to PDF -->
+            <div class="tool-card">
+                <div>
+                    <div class="icon-box bg-green-100 text-green-600">🖼️</div>
+                    <h3 class="text-lg font-bold text-slate-800">Image to PDF</h3>
+                    <p class="text-slate-500 text-sm mb-3">Images to single PDF.</p>
+                </div>
+                <div>
+                    <input type="file" id="img-to-pdf-files" multiple accept="image/*" class="text-sm">
+                    <button onclick="imagesToPDF()" class="btn-action bg-green-600">Create PDF</button>
+                </div>
+            </div>
+
+            <!-- Existing: JPG to PNG -->
+            <div class="tool-card border-t-4 border-pink-500">
+                <div>
+                    <div class="icon-box bg-pink-100 text-pink-600">🎨</div>
+                    <h3 class="text-lg font-bold text-slate-800">JPG to PNG</h3>
+                    <p class="text-slate-500 text-sm mb-3">Convert JPG to PNG.</p>
+                </div>
+                <div>
+                    <input type="file" id="jpg-file" accept="image/*" class="text-sm">
+                    <button onclick="convertJpgToPng()" class="btn-action bg-pink-600">Convert to PNG</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Hidden Canvas for Image Processing -->
+    <canvas id="canvas" class="hidden-canvas"></canvas>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        const { PDFDocument, rgb, degrees } = PDFLib;
+
+        // --- Helper: Read File as ArrayBuffer ---
+        const readFileAsync = (file) => {
+            return new Promise((resolve, reject) => {
+                let reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        };
+
+        // --- Helper: Read Image as DataURL ---
+        const readImageAsync = (file) => {
+            return new Promise((resolve, reject) => {
+                let reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        };
+
+        // --- Helper: Read Text File ---
+        const readTextAsync = (file) => {
+            return new Promise((resolve, reject) => {
+                let reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        };
+
+        // ---------------- NEWEST TOOLS LOGIC (LIST MAKER) ----------------
+
+        // NEW: Smart List PDF Generator
+        function generateListPDF() {
+            const headline = document.getElementById('list-headline').value;
+            const itemsText = document.getElementById('list-items').value;
+            
+            if(!headline || !itemsText) return alert("Please enter headline and items");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Header: Title centered
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.setTextColor(40);
+            doc.text(headline, 105, 20, null, null, "center");
+            
+            // Horizontal Line
+            doc.setLineWidth(0.5);
+            doc.line(20, 25, 190, 25);
+            
+            // Date at top right
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            const date = new Date().toLocaleDateString();
+            doc.text(`Date: ${date}`, 190, 32, null, null, "right");
+
+            // Process Items
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+            const items = itemsText.split('\n').filter(item => item.trim() !== "");
+            
+            let y = 45;
+            items.forEach((item, index) => {
+                if (y > 270) { // New page if full
+                    doc.addPage();
+                    y = 20;
+                }
+                doc.text(`${index + 1}. ${item}`, 20, y);
+                y += 10; // Spacing
+            });
+
+            // Footer
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            doc.text("Generated by My Local Toolset", 105, 290, null, null, "center");
+
+            doc.save("smart_list.pdf");
+        }
+
+
+        // ---------------- PREVIOUS TOOLS LOGIC (LATEX & OFFICE) ----------------
+
+        // 1. LATEX CLEANER (Strip tags -> Doc)
+        function cleanLatexToDoc() {
+            let text = document.getElementById('latex-input').value;
+            if(!text) return alert("Paste LaTeX code first!");
+
+            // Basic cleaning regex (Removing \cmd{...} keeping content, removing $..$)
+            // This is a simple approximation for client-side
+            let clean = text
+                .replace(/\\(begin|end)\{.*?\}/g, '') // Remove begin/end env
+                .replace(/\\textbf\{(.*?)\}/g, '$1') // Keep bold content
+                .replace(/\\textit\{(.*?)\}/g, '$1') // Keep italic content
+                .replace(/\\emph\{(.*?)\}/g, '$1')
+                .replace(/\\section\{(.*?)\}/g, '\n$1\n') // Sections to newlines
+                .replace(/\$.*?\$/g, '[Math]') // Placeholder for inline math
+                .replace(/\\[a-zA-Z]+\{.*?\}/g, '') // Remove generic commands with args
+                .replace(/\\[a-zA-Z]+/g, '') // Remove generic commands without args
+                .replace(/\{|\}/g, ''); // Remove braces
+
+            // Create a Blob pretending to be a Word Doc (HTML method)
+            const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML to Word Document with JavaScript</title></head><body>";
+            const footer = "</body></html>";
+            const sourceHTML = header + `<pre>${clean}</pre>` + footer;
+
+            const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
+            saveAs(blob, 'latex_cleaned.doc');
+        }
+
+        // 2. LATEX SOURCE TO PDF (Print Code)
+        async function latexSourceToPDF() {
+            const fileInput = document.getElementById('latex-file');
+            if (!fileInput.files[0]) return alert("Select a .tex file");
+
+            const text = await readTextAsync(fileInput.files[0]);
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFont("courier", "normal");
+            doc.setFontSize(10);
+            
+            // Split text to fit page
+            const lines = doc.splitTextToSize(text, 180);
+            
+            let y = 10;
+            const pageHeight = doc.internal.pageSize.height;
+            
+            lines.forEach(line => {
+                if (y > pageHeight - 10) {
+                    doc.addPage();
+                    y = 10;
+                }
+                doc.text(line, 10, y);
+                y += 5;
+            });
+
+            doc.save("latex_source_code.pdf");
+        }
+
+        // 3. NUMBER TO WORDS
+        function convertNumToWords() {
+            const num = document.getElementById('num-input').value;
+            if(!num) return alert("Enter number");
+            
+            const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+            const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+            const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+
+            function convert(n) {
+                if (n < 10) return ones[n];
+                if (n < 20) return teens[n - 10];
+                if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
+                if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' ' + convert(n % 100) : '');
+                if (n < 100000) return convert(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + convert(n % 1000) : '');
+                if (n < 10000000) return convert(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 !== 0 ? ' ' + convert(n % 100000) : '');
+                return convert(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 !== 0 ? ' ' + convert(n % 10000000) : '');
+            }
+
+            const result = num == 0 ? "Zero" : convert(parseInt(num));
+            const div = document.getElementById('num-result');
+            div.innerText = result;
+            div.classList.remove('hidden');
+        }
+
+        // 4. CASE CONVERTER
+        function changeCase(type) {
+            const area = document.getElementById('case-text');
+            let text = area.value;
+            
+            if(type === 'upper') area.value = text.toUpperCase();
+            if(type === 'lower') area.value = text.toLowerCase();
+            if(type === 'title') {
+                area.value = text.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            }
+        }
+
+        // ---------------- PREVIOUS TOOLS LOGIC ----------------
+
+        // 1. AGE CALCULATOR
+        function calculateAge() {
+            const dobInput = document.getElementById('age-dob').value;
+            // Default to today if no target date set
+            const targetInput = document.getElementById('age-target').value || new Date().toISOString().split('T')[0];
+            
+            if(!dobInput) return alert("Please select Date of Birth");
+
+            const dob = new Date(dobInput);
+            const target = new Date(targetInput);
+            
+            let years = target.getFullYear() - dob.getFullYear();
+            let months = target.getMonth() - dob.getMonth();
+            let days = target.getDate() - dob.getDate();
+
+            if (days < 0) {
+                months--;
+                // Days in previous month
+                const prevMonth = new Date(target.getFullYear(), target.getMonth(), 0);
+                days += prevMonth.getDate();
+            }
+            if (months < 0) {
+                years--;
+                months += 12;
+            }
+
+            const resultBox = document.getElementById('age-result');
+            resultBox.innerText = `${years} Years, ${months} Months, ${days} Days`;
+            resultBox.classList.remove('hidden');
+        }
+
+        // 2. ROTATE PDF
+        async function rotatePDF() {
+            const fileInput = document.getElementById('rotate-file');
+            const angle = parseInt(document.getElementById('rotate-angle').value);
+
+            if (!fileInput.files[0]) return alert("Select a PDF file");
+
+            const pdfBytes = await readFileAsync(fileInput.files[0]);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+            const pages = pdfDoc.getPages();
+
+            pages.forEach(page => {
+                const currentRotation = page.getRotation().angle;
+                page.setRotation(degrees(currentRotation + angle));
+            });
+
+            const pdfData = await pdfDoc.save();
+            const blob = new Blob([pdfData], { type: 'application/pdf' });
+            saveAs(blob, 'rotated_doc.pdf');
+        }
+
+        // 3. IMAGE SIZE REDUCER (KB Reducer)
+        function reduceImageSize() {
+            const fileInput = document.getElementById('reduce-file');
+            const quality = parseFloat(document.getElementById('reduce-quality').value);
+
+            if (!fileInput.files[0]) return alert("Select an image");
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Keep original dimensions, just redraw
+                    ctx.drawImage(img, 0, 0);
+                    
+                    canvas.toBlob(function(blob) {
+                        saveAs(blob, 'reduced_size.jpg');
+                    }, 'image/jpeg', quality);
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+
+        async function createIDCardPDF() {
+            const frontFile = document.getElementById('id-front').files[0];
+            const backFile = document.getElementById('id-back').files[0];
+
+            if(!frontFile || !backFile) return alert("Upload both Front and Back images.");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            const frontData = await readImageAsync(frontFile);
+            const backData = await readImageAsync(backFile);
+            
+            doc.text("ID Card / NID Copy", 10, 10);
+            doc.addImage(frontData, 'JPEG', 20, 30, 85, 54);
+            doc.addImage(backData, 'JPEG', 20, 90, 85, 54);
+
+            doc.save("nid_copy.pdf");
+        }
+
+        async function createPassportSheet() {
+            const file = document.getElementById('pp-photo').files[0];
+            if(!file) return alert("Select a photo.");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const imgData = await readImageAsync(file);
+
+            const w = 35;
+            const h = 45;
+            const gap = 5;
+            const startX = 15;
+            const startY = 20;
+
+            doc.text("Passport Size Sheet", 10, 10);
+
+            for(let row=0; row<2; row++) {
+                for(let col=0; col<3; col++) {
+                    let x = startX + (col * (w + gap));
+                    let y = startY + (row * (h + gap));
+                    doc.addImage(imgData, 'JPEG', x, y, w, h);
+                    doc.rect(x, y, w, h); 
+                }
+            }
+
+            doc.save("passport_sheet.pdf");
+        }
+
+        function customResize() {
+            const fileInput = document.getElementById('resize-file');
+            const w = parseInt(document.getElementById('resize-w').value);
+            const h = parseInt(document.getElementById('resize-h').value);
+
+            if(!fileInput.files[0] || !w || !h) return alert("Select file and enter dimensions.");
+
+            processImage(w, h, `resized_${w}x${h}.jpg`, 'resize-file');
+        }
+
+        function processImage(targetW, targetH, filename, elementId = null) {
+            let id = elementId;
+            if(!id) {
+                id = targetH === 300 ? 'job-photo-file' : 'sign-photo-file';
+            }
+            
+            const fileInput = document.getElementById(id);
+            
+            if (!fileInput.files[0]) return alert("Select an image");
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+                    const ctx = canvas.getContext('2d');
+                    
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.fillRect(0,0, targetW, targetH);
+                    
+                    ctx.drawImage(img, 0, 0, targetW, targetH);
+                    
+                    canvas.toBlob(function(blob) {
+                        saveAs(blob, filename);
+                    }, 'image/jpeg', 0.9);
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+
+        async function protectPDF() {
+            const fileInput = document.getElementById('protect-file');
+            const pass = document.getElementById('protect-pass').value;
+            if (!fileInput.files[0] || !pass) return alert("Select PDF and set password");
+
+            const pdfBytes = await readFileAsync(fileInput.files[0]);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+            
+            const pdfData = await pdfDoc.save({
+                userPassword: pass,
+                ownerPassword: pass,
+                permissions: { printing: 'highResolution', modifying: false, copying: false }
+            });
+
+            const blob = new Blob([pdfData], { type: 'application/pdf' });
+            saveAs(blob, 'protected_doc.pdf');
+        }
+
+        function convertWebPtoJPG() {
+            const fileInput = document.getElementById('webp-file');
+            if (!fileInput.files[0]) return alert("Select a WebP file");
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.fillRect(0,0, img.width, img.height);
+                    ctx.drawImage(img, 0, 0);
+                    canvas.toBlob(function(blob) {
+                        saveAs(blob, 'converted_image.jpg');
+                    }, 'image/jpeg', 0.9);
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+
+        function makeGrayscale() {
+            const fileInput = document.getElementById('bw-file');
+            if (!fileInput.files[0]) return alert("Select an image");
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.filter = 'grayscale(100%)';
+                    ctx.drawImage(img, 0, 0);
+                    canvas.toBlob(function(blob) {
+                        saveAs(blob, 'bw_document.jpg');
+                    }, 'image/jpeg', 0.9);
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+
+        async function splitPDF() {
+            const fileInput = document.getElementById('split-file');
+            const startPage = parseInt(document.getElementById('split-start').value);
+            const endPage = parseInt(document.getElementById('split-end').value);
+
+            if (!fileInput.files[0] || !startPage || !endPage) return alert("Please select file and page range");
+
+            const pdfBytes = await readFileAsync(fileInput.files[0]);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+            const newPdf = await PDFDocument.create();
+
+            const totalPages = pdfDoc.getPageCount();
+            if(startPage < 1 || endPage > totalPages || startPage > endPage) return alert("Invalid page range");
+
+            const range = [];
+            for (let i = startPage - 1; i < endPage; i++) range.push(i);
+
+            const copiedPages = await newPdf.copyPages(pdfDoc, range);
+            copiedPages.forEach((page) => newPdf.addPage(page));
+
+            const pdfData = await newPdf.save();
+            const blob = new Blob([pdfData], { type: 'application/pdf' });
+            saveAs(blob, `split_pages_${startPage}-${endPage}.pdf`);
+        }
+
+        async function compressPDF() {
+            const fileInput = document.getElementById('compress-file');
+            if (!fileInput.files[0]) return alert("Please select a PDF");
+
+            const pdfBytes = await readFileAsync(fileInput.files[0]);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+            const pdfData = await pdfDoc.save({ useObjectStreams: false }); 
+            const blob = new Blob([pdfData], { type: 'application/pdf' });
+            saveAs(blob, 'compressed_doc.pdf');
+        }
+
+        function textToPDF() {
+            const text = document.getElementById('text-content').value;
+            if(!text) return alert("Please enter some text");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const splitText = doc.splitTextToSize(text, 180);
+            doc.text(splitText, 10, 10);
+            doc.save("my_text_note.pdf");
+        }
+
+        async function watermarkPDF() {
+            const fileInput = document.getElementById('watermark-file');
+            const text = document.getElementById('watermark-text').value;
+
+            if (!fileInput.files[0] || !text) return alert("Select PDF and enter text");
+
+            const pdfBytes = await readFileAsync(fileInput.files[0]);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+            const pages = pdfDoc.getPages();
+
+            pages.forEach((page) => {
+                const { width, height } = page.getSize();
+                page.drawText(text, {
+                    x: width / 2 - (text.length * 6), 
+                    y: height / 2,
+                    size: 50,
+                    color: rgb(0.75, 0.75, 0.75), 
+                    rotate: degrees(45),
+                    opacity: 0.5,
+                });
+            });
+
+            const pdfData = await pdfDoc.save();
+            const blob = new Blob([pdfData], { type: 'application/pdf' });
+            saveAs(blob, 'watermarked_doc.pdf');
+        }
+
+        function generateQR() {
+            const text = document.getElementById('qr-text').value;
+            const container = document.getElementById('qr-result');
+            container.innerHTML = "";
+            
+            if(!text) return alert("Enter text");
+
+            new QRCode(container, {
+                text: text,
+                width: 128,
+                height: 128
+            });
+
+            setTimeout(() => {
+                const img = container.querySelector('img');
+                if(img) {
+                    const link = document.createElement('a');
+                    link.href = img.src;
+                    link.download = 'qrcode.png';
+                    link.innerText = "Download QR";
+                    link.className = "text-blue-600 underline text-sm block mt-2";
+                    container.appendChild(link);
+                }
+            }, 500);
+        }
+
+        async function mergePDFs() {
+            const fileInput = document.getElementById('merge-files');
+            if (fileInput.files.length < 2) return alert("Select at least 2 PDFs");
+
+            const mergedPdf = await PDFDocument.create();
+
+            for (let file of fileInput.files) {
+                const bytes = await readFileAsync(file);
+                const pdf = await PDFDocument.load(bytes);
+                const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                copiedPages.forEach((page) => mergedPdf.addPage(page));
+            }
+
+            const pdfData = await mergedPdf.save();
+            const blob = new Blob([pdfData], { type: 'application/pdf' });
+            saveAs(blob, 'merged_files.pdf');
+        }
+
+        async function imagesToPDF() {
+            const fileInput = document.getElementById('img-to-pdf-files');
+            if (fileInput.files.length === 0) return alert("Select images");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            for (let i = 0; i < fileInput.files.length; i++) {
+                const dataUrl = await readImageAsync(fileInput.files[i]);
+                const imgProps = doc.getImageProperties(dataUrl);
+                const pdfWidth = doc.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                if (i > 0) doc.addPage();
+                doc.addImage(dataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            }
+
+            doc.save("images_combined.pdf");
+        }
+
+        function convertJpgToPng() {
+            const fileInput = document.getElementById('jpg-file');
+            if (!fileInput.files[0]) return alert("Select a JPG file");
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    
+                    canvas.toBlob(function(blob) {
+                        saveAs(blob, 'converted_image.png');
+                    }, 'image/png');
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+    </script>
+</body>
+</html>

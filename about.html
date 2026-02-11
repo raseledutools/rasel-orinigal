@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Shop Manager Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+        }
+
+        /* Modal Animation */
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s; }
+        .modal-exit { opacity: 1; }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s; }
+
+        /* --- PRINT STYLES --- */
+        @media print {
+            body * { visibility: hidden; }
+            #invoice-section, #invoice-section * { visibility: visible; }
+            #invoice-section {
+                position: absolute;
+                left: 0; top: 0; width: 100%; margin: 0; padding: 0;
+                background-color: white;
+            }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body, main { overflow: visible !important; height: auto !important; display: block !important; }
+            #invoice-area { box-shadow: none !important; border: none !important; }
+            /* Hide the Checkout controls area specifically */
+            #invoice-controls { display: none !important; }
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#059669', // Default Emerald
+                        secondary: '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden text-slate-800">
+
+    <!-- Mobile Header (Visible only on small screens) -->
+    <header class="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center no-print shadow-md z-20 shrink-0">
+         <h1 class="text-lg font-bold text-emerald-400 flex items-center gap-2">
+             <i class="fas fa-chart-line"></i> SmartShop
+         </h1>
+         <div class="text-xs text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded" id="mobile-clock">--:--</div>
+    </header>
+<nav style="background: #222; padding: 10px; text-align: center;">
+    <a href="index.html" style="color: white; margin: 10px; text-decoration: none;">Home</a>
+    <a href="about.html" style="color: white; margin: 10px; text-decoration: none;">About</a>
+    <a href="contact.html" style="color: white; margin: 10px; text-decoration: none;">Contact</a>
+    <a href="project.html" style="color: white; margin: 10px; text-decoration: none;">Project</a>
+</nav>
+
+    <!-- Sidebar (Hidden on mobile, Visible on Desktop) -->
+    <aside class="hidden md:flex w-64 bg-slate-900 text-white flex-col no-print shrink-0 transition-all duration-300">
+        <div class="p-6 text-center border-b border-slate-700">
+            <h1 class="text-2xl font-bold text-emerald-400 tracking-tight app-theme-text-light" id="app-title"><i class="fas fa-chart-line mr-2"></i>SmartShop</h1>
+            <p class="text-xs text-slate-400 mt-1">Business Solution</p>
+        </div>
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <button onclick="showTab('dashboard')" id="btn-dashboard" class="w-full text-left px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition flex items-center">
+                <i class="fas fa-home w-5 mr-3 text-center"></i> Dashboard
+            </button>
+            <button onclick="showTab('invoice')" id="btn-invoice" class="w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 transition flex items-center">
+                <i class="fas fa-file-invoice-dollar w-5 mr-3 text-center"></i> Sell / Invoice
+            </button>
+            <button onclick="showTab('stock')" id="btn-stock" class="w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 transition flex items-center">
+                <i class="fas fa-boxes w-5 mr-3 text-center"></i> Stock & Inventory
+            </button>
+            <div class="pt-4 mt-4 border-t border-slate-700">
+                <button onclick="showTab('settings')" id="btn-settings" class="w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 transition flex items-center text-slate-300 hover:text-white">
+                    <i class="fas fa-cog w-5 mr-3 text-center"></i> Settings
+                </button>
+            </div>
+        </nav>
+        <div class="p-4 border-t border-slate-700">
+            <div class="text-xs text-center text-slate-500">
+                Developed by <span class="text-slate-300">Ashraf Ahmed</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-auto relative w-full bg-gray-50 pb-24 md:pb-0">
+        
+        <!-- DASHBOARD SECTION -->
+        <section id="dashboard-section" class="p-4 md:p-6 max-w-7xl mx-auto">
+            <div class="mb-6 md:mb-8">
+                <h2 class="text-xl md:text-2xl font-bold text-slate-800">Business Overview</h2>
+                <p class="text-sm text-slate-500">Welcome back, here is what's happening today.</p>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+                <!-- Today's Sale -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 h-full w-1 bg-emerald-500 app-theme-bg"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Today's Sales</p>
+                            <h3 class="text-2xl font-bold text-slate-800" id="dash-today-sales">Tk 0.00</h3>
+                        </div>
+                        <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600 app-theme-text app-theme-bg-light">
+                            <i class="fas fa-coins text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Sale -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 h-full w-1 bg-blue-500"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Monthly Sales</p>
+                            <h3 class="text-2xl font-bold text-slate-800" id="dash-month-sales">Tk 0.00</h3>
+                        </div>
+                        <div class="p-2 bg-blue-50 rounded-lg text-blue-600">
+                            <i class="fas fa-calendar-alt text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Stock Value -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 h-full w-1 bg-indigo-500"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Items in Stock</p>
+                            <h3 class="text-2xl font-bold text-slate-800" id="dash-total-items">0</h3>
+                        </div>
+                        <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                            <i class="fas fa-cubes text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Invoices -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 h-full w-1 bg-orange-500"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Total Invoices</p>
+                            <h3 class="text-2xl font-bold text-slate-800" id="dash-total-invoices">0</h3>
+                        </div>
+                        <div class="p-2 bg-orange-50 rounded-lg text-orange-600">
+                            <i class="fas fa-file-invoice text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Low Stock Alert -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 lg:col-span-1">
+                    <h3 class="font-bold text-lg text-slate-800 mb-4 flex items-center">
+                        <i class="fas fa-exclamation-circle text-red-500 mr-2"></i> Low Stock Alert
+                    </h3>
+                    <div class="overflow-y-auto max-h-[300px]" id="low-stock-list">
+                        <!-- Items injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Recent Sales Table -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 lg:col-span-2">
+                    <h3 class="font-bold text-lg text-slate-800 mb-4">Recent Transactions</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left whitespace-nowrap">
+                            <thead class="bg-gray-50 text-gray-500">
+                                <tr>
+                                    <th class="px-4 py-3 rounded-l-lg">Inv ID</th>
+                                    <th class="px-4 py-3">Date</th>
+                                    <th class="px-4 py-3">Items</th>
+                                    <th class="px-4 py-3 text-right rounded-r-lg">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-sales-list" class="divide-y divide-gray-100">
+                                <!-- Sales loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- INVOICE SECTION -->
+        <section id="invoice-section" class="hidden p-4 md:p-8 h-full">
+            <div class="max-w-5xl mx-auto">
+                <!-- Controls -->
+                <div id="invoice-controls" class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center no-print">
+                    <div class="flex-1 w-full md:w-auto">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Add Product</label>
+                        <div class="flex gap-2">
+                            <select id="product-select" class="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                                <option value="">Select Item...</option>
+                            </select>
+                            <button onclick="addItemToInvoice()" class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 text-sm font-medium">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 w-full md:w-auto justify-end">
+                        <button onclick="openResetModal()" class="px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium">
+                            <i class="fas fa-trash-alt md:hidden"></i> <span class="hidden md:inline">Clear</span>
+                        </button>
+                        <button onclick="processSale()" class="flex-1 md:flex-none px-6 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-200 text-sm font-medium flex items-center justify-center app-btn-primary">
+                            <i class="fas fa-check-circle mr-2"></i> Checkout
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Invoice Paper -->
+                <div id="invoice-area" class="bg-white p-6 md:p-12 rounded-xl shadow-lg min-h-[500px] border border-gray-200 relative mx-auto max-w-[210mm] text-xs md:text-sm">
+                    
+                    <!-- Header -->
+                    <div class="flex flex-col md:flex-row justify-between items-start border-b-2 border-slate-800 pb-6 mb-6 md:mb-8 gap-4">
+                        <div class="flex items-center gap-4">
+                            <img id="invoice-logo" src="" alt="Logo" class="h-12 md:h-16 w-auto hidden object-contain">
+                            <div>
+                                <h2 class="text-2xl md:text-4xl font-extrabold text-slate-800 tracking-tight">INVOICE</h2>
+                                <p class="text-slate-500 mt-1 text-xs md:text-sm font-medium">Original Receipt</p>
+                            </div>
+                        </div>
+                        <div class="text-left md:text-right w-full md:w-auto">
+                            <h3 class="text-lg md:text-xl font-bold text-emerald-600 app-theme-text" id="invoice-shop-name">Ashraf Ahmed</h3>
+                            <p class="text-slate-500" id="invoice-shop-sub">Electronics</p>
+                            <p class="text-slate-500" id="invoice-shop-addr">Dhaka</p>
+                        </div>
+                    </div>
+
+                    <!-- Info Grid -->
+                    <div class="flex flex-col md:flex-row justify-between mb-6 md:mb-8 gap-4">
+                        <div class="w-full md:w-1/2">
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Bill To</p>
+                            <input type="text" id="cust-name" placeholder="Customer Name" class="block w-full text-slate-800 font-bold border-b border-dashed border-gray-300 focus:border-emerald-500 outline-none py-1 mb-1 placeholder-gray-300 bg-transparent">
+                            <input type="text" id="cust-addr" placeholder="Phone / Address" class="block w-full text-slate-600 border-b border-dashed border-gray-300 focus:border-emerald-500 outline-none py-1 placeholder-gray-300 bg-transparent">
+                        </div>
+                        <div class="text-left md:text-right w-full md:w-auto">
+                            <div class="mb-1">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Invoice No:</span>
+                                <span id="invoice-id" class="font-mono font-bold text-slate-700 ml-2 block md:inline">INV-0000</span>
+                            </div>
+                            <div class="mb-1">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Date:</span>
+                                <span id="invoice-date" class="font-mono text-slate-600 ml-2 block md:inline"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full mb-8 min-w-[300px]">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider font-bold">
+                                    <th class="text-left py-2 px-2 md:px-4 rounded-l">Item</th>
+                                    <th class="text-right py-2 px-2 md:px-4">Price</th>
+                                    <th class="text-center py-2 px-2 md:px-4">Qty</th>
+                                    <th class="text-right py-2 px-2 md:px-4 rounded-r">Total</th>
+                                    <th class="w-6 no-print"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoice-items" class="text-slate-700">
+                                <!-- Items -->
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" class="text-right py-4 px-4 font-bold text-slate-500">Total:</td>
+                                    <td class="text-right py-4 px-2 md:px-4 font-bold text-xl md:text-2xl text-slate-800" id="grand-total">0.00</td>
+                                    <td class="no-print"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="mt-12">
+                        <div class="flex justify-between items-end pt-8 border-t border-gray-200">
+                            <div class="text-center">
+                                <div class="w-24 md:w-32 border-b border-gray-400 mb-2"></div>
+                                <p class="text-[10px] md:text-xs text-slate-400 font-medium uppercase">Customer</p>
+                            </div>
+                            <div class="text-center hidden md:block">
+                                <p class="text-xs text-emerald-600 italic mb-10 font-medium app-theme-text">"Thank you for your business!"</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-24 md:w-32 border-b border-gray-400 mb-2"></div>
+                                <p class="text-[10px] md:text-xs text-slate-400 font-medium uppercase">Authority</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STOCK SECTION -->
+        <section id="stock-section" class="hidden p-4 md:p-6 max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row gap-6 h-full">
+                <!-- Add Form -->
+                <div class="md:w-1/3">
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 sticky top-6">
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Add Inventory</h3>
+                        <form onsubmit="addStockItem(event)">
+                            <div class="mb-3">
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Item Name</label>
+                                <input type="text" id="stock-name" required class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="e.g. Capacitor">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 mb-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Price (Tk)</label>
+                                    <input type="number" id="stock-price" required step="0.01" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="0.00">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Qty</label>
+                                    <input type="number" id="stock-qty" required min="0" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="0">
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full bg-emerald-600 text-white py-2.5 rounded-lg hover:bg-emerald-700 transition font-medium shadow-md shadow-emerald-100 app-btn-primary">
+                                <i class="fas fa-plus mr-2"></i> Add Item
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- List -->
+                <div class="md:w-2/3">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full max-h-[60vh] md:max-h-[calc(100vh-100px)]">
+                        <div class="bg-slate-50 px-4 md:px-6 py-3 border-b border-gray-200 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-700">Stock List</h3>
+                            <span class="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-full font-bold" id="item-count">0</span>
+                        </div>
+                        <div class="overflow-auto flex-1">
+                            <table class="w-full text-sm text-left whitespace-nowrap">
+                                <thead class="bg-white text-slate-500 border-b border-slate-100 sticky top-0 shadow-sm z-10">
+                                    <tr>
+                                        <th class="px-4 md:px-6 py-3 font-semibold">Product</th>
+                                        <th class="px-4 md:px-6 py-3 text-right font-semibold">Price</th>
+                                        <th class="px-4 md:px-6 py-3 text-center font-semibold">Stock</th>
+                                        <th class="px-4 md:px-6 py-3 text-center font-semibold">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stock-list" class="divide-y divide-gray-100">
+                                    <!-- List -->
+                                </tbody>
+                            </table>
+                            <div id="empty-stock-msg" class="p-10 text-center text-gray-400 hidden">
+                                <i class="fas fa-box-open text-4xl mb-3 opacity-50"></i>
+                                <p>Inventory is empty.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- SETTINGS SECTION -->
+        <section id="settings-section" class="hidden p-4 md:p-6 max-w-4xl mx-auto">
+            <h2 class="text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center">
+                <i class="fas fa-cog text-slate-500 mr-3"></i>Settings
+            </h2>
+            
+            <div class="grid gap-6">
+                <!-- Shop Profile -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Business Profile</h3>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Shop Name</label>
+                                <input type="text" id="set-shop-name" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-emerald-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tagline</label>
+                                <input type="text" id="set-shop-sub" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-emerald-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Address</label>
+                                <input type="text" id="set-shop-addr" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-emerald-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Logo</label>
+                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer relative" onclick="document.getElementById('logo-upload').click()">
+                                <input type="file" id="logo-upload" accept="image/*" class="hidden" onchange="handleLogoUpload(this)">
+                                <img id="settings-logo-preview" src="" class="h-24 mx-auto mb-2 object-contain hidden">
+                                <div id="logo-placeholder">
+                                    <i class="fas fa-cloud-upload-alt text-3xl text-gray-300 mb-2"></i>
+                                    <p class="text-xs text-gray-400 mt-1">Tap to upload</p>
+                                </div>
+                            </div>
+                            <button onclick="clearLogo()" class="text-xs text-red-500 mt-2 hover:underline w-full text-center">Remove Logo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Theme Settings -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Theme Color</h3>
+                    <div class="flex gap-4 justify-start overflow-x-auto pb-2">
+                        <button onclick="setTheme('emerald')" class="w-10 h-10 rounded-full bg-emerald-600 ring-2 ring-offset-2 ring-emerald-600 focus:outline-none flex-shrink-0"></button>
+                        <button onclick="setTheme('blue')" class="w-10 h-10 rounded-full bg-blue-600 hover:ring-2 ring-offset-2 ring-blue-600 focus:outline-none flex-shrink-0"></button>
+                        <button onclick="setTheme('violet')" class="w-10 h-10 rounded-full bg-violet-600 hover:ring-2 ring-offset-2 ring-violet-600 focus:outline-none flex-shrink-0"></button>
+                        <button onclick="setTheme('rose')" class="w-10 h-10 rounded-full bg-rose-600 hover:ring-2 ring-offset-2 ring-rose-600 focus:outline-none flex-shrink-0"></button>
+                        <button onclick="setTheme('slate')" class="w-10 h-10 rounded-full bg-slate-700 hover:ring-2 ring-offset-2 ring-slate-700 focus:outline-none flex-shrink-0"></button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Current: <span class="font-bold uppercase" id="current-theme-name">Emerald</span></p>
+                </div>
+
+                <!-- Danger Zone -->
+                <div class="bg-red-50 rounded-xl shadow-sm border border-red-100 p-4 md:p-6">
+                    <h3 class="text-lg font-bold text-red-700 mb-2">Danger Zone</h3>
+                    <button onclick="factoryReset()" class="w-full bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 text-sm font-medium">
+                        <i class="fas fa-skull-crossbones mr-2"></i> Reset All Data
+                    </button>
+                </div>
+
+                <div class="h-20 md:h-0"></div> <!-- Spacer for mobile nav -->
+                
+                <div class="fixed md:static bottom-20 left-0 w-full px-6 md:px-0 z-30 pointer-events-none md:pointer-events-auto">
+                    <button onclick="saveSettings()" class="pointer-events-auto w-full md:w-auto bg-slate-800 text-white px-6 py-3 rounded-lg hover:bg-slate-700 font-bold shadow-lg app-btn-primary">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ANDROID STYLE BOTTOM NAVIGATION (Visible only on Mobile) -->
+    <nav id="mobile-nav" class="md:hidden fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around items-center h-16 z-50 no-print pb-safe">
+        <button onclick="showTab('dashboard')" id="mob-btn-dashboard" class="flex flex-col items-center justify-center w-full h-full text-emerald-600">
+            <i class="fas fa-home text-lg mb-1"></i>
+            <span class="text-[10px] font-medium">Home</span>
+        </button>
+        <button onclick="showTab('invoice')" id="mob-btn-invoice" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
+            <i class="fas fa-file-invoice-dollar text-lg mb-1"></i>
+            <span class="text-[10px] font-medium">Sell</span>
+        </button>
+        <div class="relative -top-5">
+            <button onclick="showTab('invoice')" class="bg-emerald-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-gray-50 app-btn-primary">
+                <i class="fas fa-plus text-xl"></i>
+            </button>
+        </div>
+        <button onclick="showTab('stock')" id="mob-btn-stock" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
+            <i class="fas fa-boxes text-lg mb-1"></i>
+            <span class="text-[10px] font-medium">Stock</span>
+        </button>
+        <button onclick="showTab('settings')" id="mob-btn-settings" class="flex flex-col items-center justify-center w-full h-full text-slate-400">
+            <i class="fas fa-cog text-lg mb-1"></i>
+            <span class="text-[10px] font-medium">Settings</span>
+        </button>
+    </nav>
+
+    <!-- CONFIRMATION MODALS -->
+    <!-- Delete Modal -->
+    <div id="delete-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center z-50 transition-all opacity-0 px-4">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl transform scale-95 transition-all" id="delete-modal-box">
+            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <i class="fas fa-trash-alt text-red-500 text-xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Remove Item?</h3>
+            <p class="text-sm text-slate-500 mb-6">This will remove the item from stock permanently.</p>
+            <div class="flex gap-3">
+                <button onclick="closeModal('delete-modal')" class="flex-1 px-4 py-2 bg-gray-100 text-slate-700 rounded-lg font-medium">Cancel</button>
+                <button onclick="confirmDelete()" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg font-medium">Remove</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Modal -->
+    <div id="reset-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center z-50 transition-all opacity-0 px-4">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl transform scale-95 transition-all text-center" id="reset-modal-box">
+            <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-redo text-blue-500 text-xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Reset Invoice?</h3>
+            <p class="text-sm text-slate-500 mb-6">Clear all items from current invoice?</p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="closeModal('reset-modal')" class="flex-1 px-4 py-2 bg-gray-100 text-slate-700 rounded-lg font-medium">No</button>
+                <button onclick="confirmReset()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">Yes, Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkout Success Modal -->
+    <div id="checkout-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center z-50 transition-all opacity-0 px-4">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl transform scale-95 transition-all text-center" id="checkout-modal-box">
+            <div class="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                <i class="fas fa-check text-emerald-500 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-2">Sale Complete!</h3>
+            <p class="text-sm text-slate-500 mb-6">Inventory updated successfully.</p>
+            <button onclick="finishCheckout()" class="w-full px-4 py-3 bg-slate-800 text-white rounded-lg font-medium shadow-lg app-btn-primary">
+                <i class="fas fa-print mr-2"></i> Print Receipt
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA STORE ---
+        let stock = JSON.parse(localStorage.getItem('shopStock')) || [];
+        stock = stock.map(item => ({...item, qty: item.qty || 0}));
+        
+        let salesHistory = JSON.parse(localStorage.getItem('salesHistory')) || [];
+        
+        // --- SETTINGS STORE ---
+        let settings = JSON.parse(localStorage.getItem('shopSettings')) || {
+            name: "Ashraf Ahmed",
+            sub: "Electronics & Engineering",
+            addr: "Gazipur, Dhaka",
+            logo: "",
+            theme: "emerald"
+        };
+        
+        let currentActiveTab = 'dashboard';
+        let invoiceItems = [];
+        let tempIdToDelete = null;
+        
+        // Themes Config
+        const themeColors = ['emerald', 'blue', 'violet', 'rose', 'slate'];
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            applySettings(); 
+            updateDashboard();
+            renderStockList();
+            populateProductSelect();
+            updateTime();
+            showTab('dashboard'); 
+            generateInvoiceInfo();
+            
+            // Update mobile clock every minute
+            setInterval(updateTime, 60000);
+        });
+
+        // --- NAVIGATION ---
+        function showTab(tab) {
+            currentActiveTab = tab;
+            
+            // Hide all sections
+            ['dashboard', 'invoice', 'stock', 'settings'].forEach(t => {
+                const sec = document.getElementById(`${t}-section`);
+                if(sec) sec.classList.add('hidden');
+                
+                // Desktop Button Reset
+                const btn = document.getElementById(`btn-${t}`);
+                if(btn) {
+                    btn.className = `w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 transition flex items-center ${t === 'settings' ? 'text-slate-300 hover:text-white' : 'text-white'}`;
+                }
+
+                // Mobile Button Reset
+                const mobBtn = document.getElementById(`mob-btn-${t}`);
+                if(mobBtn) {
+                    mobBtn.className = "flex flex-col items-center justify-center w-full h-full text-slate-400 transition-colors duration-200";
+                }
+            });
+
+            // Show active section
+            const activeSec = document.getElementById(`${tab}-section`);
+            if(activeSec) activeSec.classList.remove('hidden');
+            
+            const theme = settings.theme || 'emerald';
+
+            // Desktop Active Button
+            const activeBtn = document.getElementById(`btn-${tab}`);
+            if(activeBtn) {
+                activeBtn.className = `w-full text-left px-4 py-3 rounded-lg bg-${theme}-600 hover:bg-${theme}-500 transition flex items-center text-white`;
+            }
+
+            // Mobile Active Button
+            const activeMobBtn = document.getElementById(`mob-btn-${tab}`);
+            if(activeMobBtn) {
+                // We use dynamic style application via helper to ensure color consistency
+                activeMobBtn.className = `flex flex-col items-center justify-center w-full h-full text-${theme}-600 transition-colors duration-200`;
+            }
+
+            if(tab === 'dashboard') updateDashboard();
+            if(tab === 'invoice') populateProductSelect();
+            if(tab === 'settings') loadSettingsToInputs();
+        }
+
+        // --- SETTINGS LOGIC ---
+        function loadSettingsToInputs() {
+            document.getElementById('set-shop-name').value = settings.name;
+            document.getElementById('set-shop-sub').value = settings.sub;
+            document.getElementById('set-shop-addr').value = settings.addr;
+            document.getElementById('current-theme-name').innerText = settings.theme;
+            
+            if(settings.logo) {
+                document.getElementById('settings-logo-preview').src = settings.logo;
+                document.getElementById('settings-logo-preview').classList.remove('hidden');
+                document.getElementById('logo-placeholder').classList.add('hidden');
+            }
+        }
+
+        function handleLogoUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('settings-logo-preview').src = e.target.result;
+                    document.getElementById('settings-logo-preview').classList.remove('hidden');
+                    document.getElementById('logo-placeholder').classList.add('hidden');
+                    settings.logo = e.target.result;
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        
+        function clearLogo() {
+            settings.logo = "";
+            document.getElementById('settings-logo-preview').src = "";
+            document.getElementById('settings-logo-preview').classList.add('hidden');
+            document.getElementById('logo-placeholder').classList.remove('hidden');
+            document.getElementById('logo-upload').value = ""; 
+        }
+
+        function setTheme(color) {
+            settings.theme = color;
+            document.getElementById('current-theme-name').innerText = color;
+        }
+
+        function saveSettings() {
+            settings.name = document.getElementById('set-shop-name').value;
+            settings.sub = document.getElementById('set-shop-sub').value;
+            settings.addr = document.getElementById('set-shop-addr').value;
+            
+            localStorage.setItem('shopSettings', JSON.stringify(settings));
+            applySettings(); 
+            alert("Settings Saved!");
+        }
+
+        function applySettings() {
+            document.getElementById('invoice-shop-name').innerText = settings.name;
+            document.getElementById('invoice-shop-sub').innerText = settings.sub;
+            document.getElementById('invoice-shop-addr').innerText = settings.addr;
+
+            const logoImg = document.getElementById('invoice-logo');
+            if (settings.logo) {
+                logoImg.src = settings.logo;
+                logoImg.classList.remove('hidden');
+            } else {
+                logoImg.classList.add('hidden');
+            }
+
+            applyThemeColor(settings.theme || 'emerald');
+        }
+
+        function applyThemeColor(theme) {
+            // Helper to strip old theme colors and add new one
+            // We must be careful to target the right utility classes (bg-, text-, shadow-)
+            
+            const updateClasses = (selector, type) => {
+                document.querySelectorAll(selector).forEach(el => {
+                    themeColors.forEach(c => {
+                        if(type === 'bg') el.classList.remove(`bg-${c}-600`, `hover:bg-${c}-700`, `shadow-${c}-200`);
+                        if(type === 'text') el.classList.remove(`text-${c}-600`);
+                        if(type === 'text-light') el.classList.remove(`text-${c}-400`);
+                        if(type === 'bg-solid') el.classList.remove(`bg-${c}-500`);
+                        if(type === 'bg-light') el.classList.remove(`bg-${c}-50`);
+                    });
+                    
+                    if(type === 'bg') el.classList.add(`bg-${theme}-600`, `hover:bg-${theme}-700`, `shadow-${theme}-200`);
+                    if(type === 'text') el.classList.add(`text-${theme}-600`);
+                    if(type === 'text-light') el.classList.add(`text-${theme}-400`);
+                    if(type === 'bg-solid') el.classList.add(`bg-${theme}-500`);
+                    if(type === 'bg-light') el.classList.add(`bg-${theme}-50`);
+                });
+            };
+
+            updateClasses('.app-btn-primary', 'bg');
+            updateClasses('.app-theme-text', 'text');
+            updateClasses('.app-theme-text-light', 'text-light');
+            updateClasses('.app-theme-bg', 'bg-solid');
+            updateClasses('.app-theme-bg-light', 'bg-light');
+
+            // Mobile Nav Active State Update
+            const activeMobBtn = document.getElementById(`mob-btn-${currentActiveTab}`);
+            if(activeMobBtn) {
+                themeColors.forEach(c => activeMobBtn.classList.remove(`text-${c}-600`));
+                activeMobBtn.classList.add(`text-${theme}-600`);
+            }
+        }
+
+        function factoryReset() {
+            if(confirm("DANGER: Delete ALL data permanently?")) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+
+        // --- DASHBOARD LOGIC ---
+        function updateDashboard() {
+            const today = new Date().toDateString();
+            const thisMonth = new Date().getMonth();
+            const thisYear = new Date().getFullYear();
+
+            let todayTotal = 0;
+            let monthTotal = 0;
+
+            salesHistory.forEach(sale => {
+                const saleDate = new Date(sale.timestamp);
+                if (saleDate.toDateString() === today) todayTotal += sale.total;
+                if (saleDate.getMonth() === thisMonth && saleDate.getFullYear() === thisYear) monthTotal += sale.total;
+            });
+
+            const totalStockItems = stock.reduce((sum, item) => sum + parseInt(item.qty), 0);
+
+            document.getElementById('dash-today-sales').innerText = `Tk ${todayTotal.toLocaleString('en-BD')}`;
+            document.getElementById('dash-month-sales').innerText = `Tk ${monthTotal.toLocaleString('en-BD')}`;
+            document.getElementById('dash-total-items').innerText = totalStockItems;
+            document.getElementById('dash-total-invoices').innerText = salesHistory.length;
+
+            const lowStockList = document.getElementById('low-stock-list');
+            lowStockList.innerHTML = '';
+            stock.filter(i => i.qty < 5).forEach(item => {
+                lowStockList.innerHTML += `
+                    <div class="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                        <span class="text-sm font-medium text-slate-700">${item.name}</span>
+                        <span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">${item.qty} left</span>
+                    </div>
+                `;
+            });
+
+            const recentList = document.getElementById('recent-sales-list');
+            recentList.innerHTML = '';
+            salesHistory.slice(-5).reverse().forEach(sale => {
+                const dateStr = new Date(sale.timestamp).toLocaleDateString();
+                recentList.innerHTML += `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-4 py-3 font-mono text-xs text-slate-500">${sale.id}</td>
+                        <td class="px-4 py-3 text-slate-600">${dateStr}</td>
+                        <td class="px-4 py-3 text-slate-600">${sale.itemCount} items</td>
+                        <td class="px-4 py-3 text-right font-bold text-slate-700">Tk ${sale.total.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+            
+            applyThemeColor(settings.theme || 'emerald');
+        }
+
+        // --- STOCK LOGIC ---
+        function renderStockList() {
+            const list = document.getElementById('stock-list');
+            const count = document.getElementById('item-count');
+            const msg = document.getElementById('empty-stock-msg');
+            
+            list.innerHTML = '';
+            count.innerText = stock.length;
+
+            if (stock.length === 0) {
+                msg.classList.remove('hidden');
+                return;
+            }
+            msg.classList.add('hidden');
+
+            stock.forEach(item => {
+                const stockStatusClass = item.qty < 5 ? 'text-red-600 font-bold' : 'text-slate-600';
+                list.innerHTML += `
+                    <tr class="hover:bg-gray-50 transition group">
+                        <td class="px-4 md:px-6 py-3 font-medium text-slate-800">${item.name}</td>
+                        <td class="px-4 md:px-6 py-3 text-right text-slate-600">Tk ${item.price.toFixed(2)}</td>
+                        <td class="px-4 md:px-6 py-3 text-center ${stockStatusClass}">${item.qty}</td>
+                        <td class="px-4 md:px-6 py-3 text-center">
+                            <button onclick="promptDelete(${item.id})" class="text-slate-400 hover:text-red-500 transition px-2">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            localStorage.setItem('shopStock', JSON.stringify(stock));
+        }
+
+        function addStockItem(e) {
+            e.preventDefault();
+            const name = document.getElementById('stock-name').value;
+            const price = parseFloat(document.getElementById('stock-price').value);
+            const qty = parseInt(document.getElementById('stock-qty').value);
+
+            if (!name || isNaN(price) || isNaN(qty)) return;
+
+            stock.push({
+                id: Date.now(),
+                name,
+                price,
+                qty
+            });
+
+            e.target.reset();
+            renderStockList();
+            updateDashboard(); 
+        }
+
+        function promptDelete(id) {
+            tempIdToDelete = id;
+            openModal('delete-modal');
+        }
+
+        function confirmDelete() {
+            if (tempIdToDelete) {
+                stock = stock.filter(i => i.id !== tempIdToDelete);
+                renderStockList();
+                updateDashboard();
+                closeModal('delete-modal');
+            }
+        }
+
+        // --- INVOICE LOGIC ---
+        function populateProductSelect() {
+            const select = document.getElementById('product-select');
+            select.innerHTML = '<option value="">Select Item...</option>';
+            stock.forEach(item => {
+                const disabled = item.qty < 1 ? 'disabled' : '';
+                const label = item.qty < 1 ? ` (Out)` : ` (${item.qty})`;
+                select.innerHTML += `<option value="${item.id}" ${disabled}>${item.name} - Tk ${item.price} ${label}</option>`;
+            });
+        }
+
+        function addItemToInvoice() {
+            const id = document.getElementById('product-select').value;
+            if (!id) return;
+
+            const product = stock.find(p => p.id == id);
+            const existing = invoiceItems.find(i => i.id == id);
+
+            if (existing) {
+                if (existing.qty + 1 > product.qty) {
+                    alert(`Only ${product.qty} left.`);
+                    return;
+                }
+                existing.qty++;
+            } else {
+                invoiceItems.push({
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    qty: 1,
+                    maxQty: product.qty
+                });
+            }
+            
+            renderInvoice();
+            document.getElementById('product-select').value = '';
+        }
+
+        function renderInvoice() {
+            const tbody = document.getElementById('invoice-items');
+            tbody.innerHTML = '';
+            let total = 0;
+
+            invoiceItems.forEach((item, idx) => {
+                const lineTotal = item.qty * item.price;
+                total += lineTotal;
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 last:border-0">
+                        <td class="py-2 px-2 md:px-4">${item.name}</td>
+                        <td class="py-2 px-2 md:px-4 text-right">${item.price.toFixed(2)}</td>
+                        <td class="py-2 px-2 md:px-4 text-center">
+                            <input type="number" min="1" max="${item.maxQty}" value="${item.qty}" 
+                                onchange="updateInvQty(${idx}, this.value)"
+                                class="w-12 md:w-16 text-center border rounded bg-gray-50 focus:bg-white no-print text-sm p-1">
+                            <span class="print-only">${item.qty}</span>
+                        </td>
+                        <td class="py-2 px-2 md:px-4 text-right font-bold">Tk ${lineTotal.toFixed(2)}</td>
+                        <td class="text-center no-print w-6">
+                            <button onclick="removeInvItem(${idx})" class="text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('grand-total').innerText = `Tk ${total.toFixed(2)}`;
+        }
+
+        function updateInvQty(idx, val) {
+            val = parseInt(val);
+            const item = invoiceItems[idx];
+            if (val > item.maxQty) {
+                alert(`Limit: ${item.maxQty}`);
+                renderInvoice(); 
+                return;
+            }
+            if (val < 1) val = 1;
+            item.qty = val;
+            renderInvoice();
+        }
+
+        function removeInvItem(idx) {
+            invoiceItems.splice(idx, 1);
+            renderInvoice();
+        }
+
+        // --- RESET LOGIC ---
+        function openResetModal() {
+            openModal('reset-modal');
+        }
+
+        function confirmReset() {
+            invoiceItems = [];
+            renderInvoice();
+            document.getElementById('cust-name').value = '';
+            document.getElementById('cust-addr').value = '';
+            generateInvoiceInfo(); 
+            closeModal('reset-modal');
+        }
+
+        // --- CHECKOUT PROCESS ---
+        function processSale() {
+            if (invoiceItems.length === 0) return alert("Invoice is empty!");
+            
+            // 1. Deduct Stock
+            invoiceItems.forEach(invItem => {
+                const stockItem = stock.find(s => s.id == invItem.id);
+                if (stockItem) {
+                    stockItem.qty -= invItem.qty;
+                }
+            });
+            localStorage.setItem('shopStock', JSON.stringify(stock));
+
+            // 2. Add to Sales History
+            const currentInvoiceID = document.getElementById('invoice-id').innerText;
+            const total = invoiceItems.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            
+            const saleRecord = {
+                id: currentInvoiceID,
+                timestamp: new Date().toISOString(),
+                total: total,
+                itemCount: invoiceItems.reduce((sum, i) => sum + i.qty, 0),
+                customer: document.getElementById('cust-name').value || 'Walk-in'
+            };
+            salesHistory.push(saleRecord);
+            localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
+
+            // 3. Show Success & Print
+            openModal('checkout-modal');
+        }
+
+        function finishCheckout() {
+            window.print();
+            closeModal('checkout-modal');
+            
+            setTimeout(() => {
+                invoiceItems = [];
+                document.getElementById('cust-name').value = '';
+                document.getElementById('cust-addr').value = '';
+                renderInvoice();
+                updateDashboard(); 
+                renderStockList(); 
+                generateInvoiceInfo(); 
+            }, 1000);
+        }
+
+        // --- UTILS ---
+        function updateTime() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-GB');
+            const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            document.getElementById('invoice-date').innerText = dateStr;
+            
+            // Update Mobile Header Clock
+            const mobClock = document.getElementById('mobile-clock');
+            if(mobClock) mobClock.innerText = timeStr;
+        }
+
+        function generateInvoiceInfo() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const dateCode = `${year}${month}${day}`;
+
+            const todaySalesCount = salesHistory.filter(sale => {
+                const saleDate = new Date(sale.timestamp);
+                return saleDate.getDate() === now.getDate() &&
+                       saleDate.getMonth() === now.getMonth() &&
+                       saleDate.getFullYear() === now.getFullYear();
+            }).length;
+
+            const sequence = String(todaySalesCount + 1).padStart(3, '0');
+            document.getElementById('invoice-id').innerText = `INV-${dateCode}-${sequence}`;
+        }
+
+        // --- MODAL SYSTEM ---
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            const box = document.getElementById(`${id}-box`);
+            modal.classList.remove('hidden', 'opacity-0');
+            modal.classList.add('flex', 'opacity-100');
+            setTimeout(() => {
+                box.classList.remove('scale-95');
+                box.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            const box = document.getElementById(`${id}-box`);
+            box.classList.remove('scale-100');
+            box.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden', 'opacity-0');
+                modal.classList.remove('flex', 'opacity-100');
+            }, 200);
+        }
+    </script>
+</body>
+</html>
