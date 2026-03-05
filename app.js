@@ -11,50 +11,42 @@ const firebaseConfig = {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// --- ২. গ্লোবাল ভ্যারিয়েবল (Global States) ---
+// --- ২. গ্লোবাল ভ্যারিয়েবল ---
 let localTracks = { videoTrack: null, audioTrack: null };
 let screenTrack = null;
 let currentRoom = null;
 let userName = "Rasel Mia"; 
 const myUserId = Math.floor(Math.random() * 100000).toString(); 
 let myAgoraUid = null;
-let isAdmin = false; // অ্যাডমিন চেক করার জন্য
+let isAdmin = false; 
 let unreadCount = 0;
 
-// *ভেরি ইম্পর্ট্যান্ট* গ্লোবাল স্টেট (মাইক এবং ক্যামেরা)
-let state = {
-    isMuted: false,
-    isVidOff: false,
-    isSharing: false
-};
+let state = { isMuted: false, isVidOff: false, isSharing: false };
 
-// URL চেক (কেউ লিংক থেকে আসলে)
+// URL চেক (লিংক থেকে আসলে)
 const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('room')) {
-    document.getElementById('roomInput').value = urlParams.get('room');
+const roomFromUrl = urlParams.get('room');
+
+if (roomFromUrl) {
+    document.getElementById('direct-visit-ui').style.display = 'none';
+    document.getElementById('join-link-ui').style.display = 'block';
 }
 
-// --- ৩. অটোমেটিক পারমিশন এবং প্রিভিউ (Window Load) ---
+// --- ৩. অটোমেটিক পারমিশন ---
 window.onload = async () => {
     try {
-        // ক্রিস্টাল ক্লিয়ার অডিওর জন্য
         [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
             { AEC: true, ANS: true, AGC: true, encoderConfig: "high_quality" }, 
             { encoderConfig: "720p_1" }
         );
-        
         localTracks.videoTrack.play('pre-join-player');
-        
-        // লোডিং স্ক্রিন সরিয়ে দেওয়া
-        document.getElementById('loading-overlay').style.display = 'none';
     } catch (error) {
-        document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>ক্যামেরা বা মাইকের পারমিশন দেওয়া হয়নি!</p>";
+        alert("ক্যামেরা/মাইক পারমিশন দিন, না হলে মিটিংয়ে কথা বলতে পারবেন না!");
     }
 };
 
-// --- ৪. সেন্ট্রাল বাটন সিঙ্ক ফাংশন (যাতে বাটন উল্টাপাল্টা না হয়) ---
+// --- ৪. সেন্ট্রাল বাটন সিঙ্ক ফাংশন ---
 function syncUI() {
-    // Mic Buttons
     const micBtns = [document.getElementById('preMicBtn'), document.getElementById('mainMicBtn')];
     micBtns.forEach(btn => {
         if (!btn) return;
@@ -67,7 +59,6 @@ function syncUI() {
         }
     });
 
-    // Camera Buttons
     const camBtns = [document.getElementById('preCamBtn'), document.getElementById('mainCamBtn')];
     camBtns.forEach(btn => {
         if (!btn) return;
@@ -81,7 +72,6 @@ function syncUI() {
     });
 }
 
-// বাটন ক্লিক হ্যান্ডলার
 async function toggleMic() {
     state.isMuted = !state.isMuted;
     if (localTracks.audioTrack) await localTracks.audioTrack.setMuted(state.isMuted);
@@ -94,7 +84,6 @@ async function toggleCam() {
     syncUI();
 }
 
-// বাটনগুলোতে ইভেন্ট লিসেনার অ্যাড করা
 document.getElementById('preMicBtn').onclick = toggleMic;
 document.getElementById('mainMicBtn').onclick = toggleMic;
 document.getElementById('preCamBtn').onclick = toggleCam;
@@ -102,55 +91,65 @@ document.getElementById('mainCamBtn').onclick = toggleCam;
 
 // --- ৫. মিটিং তৈরি এবং জয়েন ---
 document.getElementById('createRoomBtn').onclick = () => {
-    userName = document.getElementById('userName').value.trim() || userName;
-    currentRoom = Math.floor(100000 + Math.random() * 900000).toString();
-    isAdmin = true; // যে ক্রিয়েট করবে সে অ্যাডমিন
-    startMeeting(currentRoom);
+    userName = document.getElementById('userNameDirect').value.trim() || userName;
+    const newRoomId = Math.floor(100000 + Math.random() * 900000).toString();
+    isAdmin = true; 
+    startMeeting(newRoomId);
 };
 
 document.getElementById('joinRoomBtn').onclick = () => {
-    userName = document.getElementById('userName').value.trim() || userName;
-    currentRoom = document.getElementById('roomInput').value.trim();
-    if (currentRoom.length === 6) {
+    userName = document.getElementById('userNameDirect').value.trim() || userName;
+    const roomId = document.getElementById('roomInput').value.trim();
+    if (roomId.length === 6) {
         isAdmin = false;
-        startMeeting(currentRoom);
-    } else {
-        alert("সঠিক ৬ ডিজিটের আইডি দিন!");
-    }
+        startMeeting(roomId);
+    } else { alert("সঠিক ৬ ডিজিটের আইডি দিন!"); }
 };
 
+document.getElementById('joinFromLinkBtn').onclick = () => {
+    userName = document.getElementById('userNameLink').value.trim() || userName;
+    isAdmin = false;
+    startMeeting(roomFromUrl);
+};
+
+// দ্য মেইন ম্যাজিক ফাংশন
 async function startMeeting(roomId) {
+    // BUG FIX: currentRoom সেট না করলে অন্য ইউজাররা কানেক্ট হতে পারছিল না!
+    currentRoom = roomId; 
+
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('main-meeting').style.display = 'flex';
-    document.getElementById('displayRoomId').innerText = roomId;
+    document.getElementById('displayRoomId').innerText = currentRoom;
     document.getElementById('my-name-badge').innerText = userName + (isAdmin ? " (Host)" : " (You)");
 
-    // প্রি-জয়েন থেকে ভিডিও সরিয়ে মেইন প্লেয়ারে আনা
     localTracks.videoTrack.play('local-player');
     document.getElementById('local-box').setAttribute('data-uid', 'local');
 
+    syncUI();
+
     try {
-        myAgoraUid = await client.join(APP_ID, roomId, null, null);
+        myAgoraUid = await client.join(APP_ID, currentRoom, null, null);
         document.getElementById('local-box').id = `user-${myAgoraUid}`;
         
         await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
         
-        // অ্যাডমিন হলে ডাটাবেজে রুম তৈরি করবে
         if (isAdmin) {
-            await db.collection('rooms').doc(roomId).set({ active: true, admin: myAgoraUid }, { merge: true });
+            await db.collection('rooms').doc(currentRoom).set({ active: true, admin: myAgoraUid }, { merge: true });
         }
 
         listenForGrid();
-        listenForChats(roomId);
-        listenForRoomStatus(roomId); // রুম কেটে দেওয়া হলো কিনা চেক করা
+        listenForChats(currentRoom);
+        listenForRoomStatus(currentRoom); 
     } catch (e) {
-        alert("কানেকশনে সমস্যা! আবার চেষ্টা করুন।");
+        console.error("Connection Error:", e);
+        alert("মিটিংয়ে জয়েন করতে সমস্যা হচ্ছে। আবার চেষ্টা করুন।");
         window.location.reload();
     }
 
-    // অন্যরা জয়েন করলে
+    // অন্য কেউ জয়েন করলে (বা আগে থেকেই থাকলে)
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
+        
         if (mediaType === "video") {
             let remoteBox = document.getElementById(`user-${user.uid}`);
             if (!remoteBox) {
@@ -163,7 +162,10 @@ async function startMeeting(roomId) {
             user.videoTrack.play(remoteBox.id);
             updateGridCount();
         }
-        if (mediaType === "audio") user.audioTrack.play();
+        
+        if (mediaType === "audio") {
+            user.audioTrack.play();
+        }
     });
 
     client.on("user-left", (user) => {
@@ -216,6 +218,7 @@ async function stopSharing() {
 }
 
 function listenForGrid() {
+    if(!currentRoom) return;
     db.collection('rooms').doc(currentRoom).onSnapshot(doc => {
         if (!doc.exists) return;
         const data = doc.data();
@@ -271,27 +274,21 @@ function listenForChats(roomId) {
     });
 }
 
-// --- ৮. অ্যাডমিন এন্ড মিটিং এবং ডাটা ডিলিট লজিক ---
+// --- ৮. অ্যাডমিন এন্ড মিটিং এবং ডিলিট লজিক ---
 document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("লিংক কপি হয়েছে!"));
 
 document.getElementById('leaveMeetingBtn').onclick = async () => {
     const msg = isAdmin ? "আপনি কি মিটিংটি সবার জন্য শেষ করে দিতে চান? (চ্যাট ডিলিট হয়ে যাবে)" : "মিটিং থেকে বের হতে চান?";
     if (confirm(msg)) {
         if (isAdmin) {
-            // অ্যাডমিন হলে রুমের স্ট্যাটাস ended করে দেওয়া
             await db.collection('rooms').doc(currentRoom).update({ status: 'ended' });
-            
-            // চ্যাট হিস্ট্রি ডিলিট করা
             const chatDocs = await db.collection('rooms').doc(currentRoom).collection('chats').get();
             const batch = db.batch();
             chatDocs.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
-            
-            // সবশেষে রুম ডিলিট
             await db.collection('rooms').doc(currentRoom).delete();
         }
         
-        // লোকাল ক্লিনআপ
         if(state.isSharing) await stopSharing();
         localTracks.audioTrack?.close(); 
         localTracks.videoTrack?.close();
@@ -300,7 +297,6 @@ document.getElementById('leaveMeetingBtn').onclick = async () => {
     }
 };
 
-// অন্য ইউজাররা শুনবে কখন অ্যাডমিন মিটিং কেটে দিল
 function listenForRoomStatus(roomId) {
     db.collection('rooms').doc(roomId).onSnapshot(doc => {
         if (doc.exists && doc.data().status === 'ended' && !isAdmin) {
