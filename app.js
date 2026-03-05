@@ -1,5 +1,5 @@
 // --- ১. Agora এবং Firebase কনফিগারেশন ---
-const APP_ID = "3581d419edb9484eb108db498e6bcdcf"; // আপনার Agora App ID
+const APP_ID = "e286b94ae5df4ae7a7359cc70e7e9b91"; 
 const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
 const firebaseConfig = {
@@ -17,7 +17,7 @@ const db = firebase.firestore();
 let localTracks = { videoTrack: null, audioTrack: null };
 let screenTrack = null;
 let currentRoom = null;
-const myUserId = Math.floor(Math.random() * 10000).toString(); // চ্যাটের জন্য 
+const myUserId = Math.floor(Math.random() * 10000).toString(); 
 let unreadCount = 0;
 
 const videoGrid = document.getElementById('video-grid');
@@ -28,13 +28,26 @@ function generate6DigitID() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// --- ৩. ক্যামেরা চালু ---
+// --- ৩. ক্যামেরা চালু (HD Video & Pro Audio) ---
 document.getElementById('startCamBtn').onclick = async () => {
     try {
-        // Agora থেকে ক্যামেরা ও মাইক পারমিশন নেওয়া
-        [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+        // ভিডিও এবং অডিও কোয়ালিটি হাই করা হয়েছে
+        const audioConfig = { 
+            AEC: true, // Echo Cancellation (সাউন্ড ইকো হবে না)
+            ANS: true, // Noise Suppression (ব্যাকগ্রাউন্ড নয়েজ কমাবে)
+            encoderConfig: "high_quality" 
+        };
+        const videoConfig = { 
+            encoderConfig: {
+                width: { max: 1280, ideal: 1280 }, // 720p HD
+                height: { max: 720, ideal: 720 },
+                frameRate: { max: 30, ideal: 30 }, // 30 FPS স্মুথ ভিডিও
+                bitrateMin: 600, bitrateMax: 1500 // ফাস্ট নেটওয়ার্ক ম্যানেজমেন্ট
+            } 
+        };
+
+        [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(audioConfig, videoConfig);
         
-        // নিজের ভিডিও 'local-player' বক্সে দেখানো
         localTracks.videoTrack.play('local-player');
 
         document.getElementById('startCamBtn').style.display = 'none';
@@ -63,19 +76,18 @@ async function joinMeeting(roomId) {
     document.getElementById('displayRoomId').innerText = roomId;
 
     try {
-        // Agora সার্ভারে জয়েন করা
         await client.join(APP_ID, roomId, null, null);
         
-        // নিজের অডিও ও ভিডিও পাবলিশ করা
+        // ফাস্ট পারফরম্যান্সের জন্য Dual Stream চালু করা
+        // (কারো ইন্টারনেট স্লো থাকলে সে নিজে থেকেই লো-কোয়ালিটি ভিডিও দেখবে যাতে কল না কাটে)
+        await client.enableDualStream();
+
         await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-        
-        // ফায়ারবেস চ্যাট অন করা
         listenForChats(roomId);
     } catch (e) {
         console.error("জয়েন করতে সমস্যা:", e);
     }
 
-    // অন্য কেউ জয়েন করলে (ভিডিও পাবলিশ করলে)
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
         
@@ -94,7 +106,6 @@ async function joinMeeting(roomId) {
         }
     });
 
-    // কেউ মিটিং থেকে বের হয়ে গেলে
     client.on("user-left", (user) => {
         document.getElementById(`user-${user.uid}`)?.remove();
     });
@@ -130,13 +141,11 @@ function listenForChats(roomId) {
 
 // --- ৬. কন্ট্রোল বাটন লজিক ---
 
-// ইনভাইট লিংক
 document.getElementById('inviteBtn').onclick = () => {
     const link = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
     navigator.clipboard.writeText(link).then(() => alert("লিংক কপি হয়েছে!"));
 };
 
-// মিউট/আনমিউট
 let isMuted = false;
 document.getElementById('toggleMic').onclick = async (e) => {
     isMuted = !isMuted;
@@ -145,7 +154,6 @@ document.getElementById('toggleMic').onclick = async (e) => {
     e.currentTarget.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
 };
 
-// ক্যামেরা অন/অফ
 let isVidOff = false;
 document.getElementById('toggleCam').onclick = async (e) => {
     isVidOff = !isVidOff;
@@ -154,27 +162,25 @@ document.getElementById('toggleCam').onclick = async (e) => {
     e.currentTarget.innerHTML = isVidOff ? '<i class="fas fa-video-slash"></i>' : '<i class="fas fa-video"></i>';
 };
 
-// স্ক্রিন শেয়ার (Agora স্টাইল)
 let isSharingScreen = false;
 document.getElementById('shareScreenBtn').onclick = async (e) => {
     const btn = e.currentTarget;
     if (!isSharingScreen) {
         try {
-            // স্ক্রিন ট্র্যাক তৈরি করা
-            const screenTrackRes = await AgoraRTC.createScreenVideoTrack();
+            const screenTrackRes = await AgoraRTC.createScreenVideoTrack({
+                encoderConfig: "1080p_1", // স্ক্রিন শেয়ারের কোয়ালিটি 1080p (Full HD) করা হলো
+                optimizationMode: "detail" // টেক্সট যেন ক্লিয়ার দেখা যায়
+            });
             screenTrack = Array.isArray(screenTrackRes) ? screenTrackRes[0] : screenTrackRes;
 
-            // বর্তমান ক্যামেরা সরিয়ে স্ক্রিন রিপ্লেস করা
             await client.unpublish(localTracks.videoTrack);
             await client.publish(screenTrack);
             
-            // নিজের বক্সে স্ক্রিন দেখানো
             screenTrack.play('local-player');
             
             btn.classList.add('active-off');
             isSharingScreen = true;
 
-            // ব্রাউজারের 'Stop sharing' চাপলে
             screenTrack.on("track-ended", () => stopSharing(btn));
         } catch (err) { console.error("Screen share error", err); }
     } else {
@@ -188,7 +194,6 @@ async function stopSharing(btn) {
         screenTrack.close();
         screenTrack = null;
     }
-    // আবার ক্যামেরা ফিরিয়ে আনা
     await client.publish(localTracks.videoTrack);
     localTracks.videoTrack.play('local-player');
     
@@ -196,7 +201,6 @@ async function stopSharing(btn) {
     isSharingScreen = false;
 }
 
-// চ্যাট ওপেন এবং মেসেজ পাঠানো
 document.getElementById('toggleChat').onclick = () => {
     if (chatSidebar.style.display === 'none' || chatSidebar.style.display === '') {
         chatSidebar.style.display = 'flex';
@@ -219,7 +223,6 @@ document.getElementById('sendChatBtn').onclick = () => {
     }
 };
 
-// মিটিং লিভ করা
 document.getElementById('leaveMeeting').onclick = async () => {
     if (confirm("মিটিং থেকে বের হতে চান?")) {
         for (let trackName in localTracks) {
@@ -230,4 +233,3 @@ document.getElementById('leaveMeeting').onclick = async () => {
         window.location.href = window.location.origin + window.location.pathname;
     }
 };
-
