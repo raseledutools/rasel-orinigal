@@ -1,5 +1,5 @@
 // --- ১. Agora এবং Firebase কনফিগারেশন ---
-const APP_ID = "e286b94ae5df4ae7a7359cc70e7e9b91"; // আপনার Agora App ID
+const APP_ID = "3581d419edb9484eb108db498e6bcdcf"; // আপনার Agora App ID
 const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
 const firebaseConfig = {
@@ -230,3 +230,4 @@ document.getElementById('leaveMeeting').onclick = async () => {
         window.location.href = window.location.origin + window.location.pathname;
     }
 };
+
