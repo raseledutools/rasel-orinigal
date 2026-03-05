@@ -1,292 +1,232 @@
-// --- ১. Firebase কনফিগারেশন (আপনার দেওয়া ডাটা অনুযায়ী) ---
+// --- ১. Agora এবং Firebase কনফিগারেশন ---
+const APP_ID = "e286b94ae5df4ae7a7359cc70e7e9b91"; // আপনার Agora App ID
+const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
 const firebaseConfig = {
     apiKey: "AIzaSyDGd3KAo45UuqmeGFALziz_oKm3htEASHY",
     authDomain: "mywebtools-f8d53.firebaseapp.com",
-    projectId: "mywebtools-f8d53",
-    storageBucket: "mywebtools-f8d53.firebasestorage.app",
-    messagingSenderId: "979594414301",
-    appId: "1:979594414301:web:7048c995e56e331a85f334"
+    projectId: "mywebtools-f8d53"
 };
 
-// Firebase ইনিশিয়ালাইজেশন
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
 
-// --- ২. গ্লোবাল ভ্যারিয়েবল ও WebRTC সেটআপ ---
-const servers = {
-    iceServers: [
-        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
-    ]
-};
-
-let localStream = null;
-let screenStream = null;
-let peers = {}; 
-const myUserId = Math.random().toString(36).substring(2, 10);
+// --- ২. গ্লোবাল ভ্যারিয়েবল ---
+let localTracks = { videoTrack: null, audioTrack: null };
+let screenTrack = null;
 let currentRoom = null;
+const myUserId = Math.floor(Math.random() * 10000).toString(); // চ্যাটের জন্য 
+let unreadCount = 0;
 
-// DOM Elements
-const localVideo = document.getElementById('localVideo');
 const videoGrid = document.getElementById('video-grid');
-const startCamBtn = document.getElementById('startCamBtn');
-const createRoomBtn = document.getElementById('createRoomBtn');
-const joinRoomBtn = document.getElementById('joinRoomBtn');
-const roomInput = document.getElementById('roomInput');
-const joinScreen = document.getElementById('join-screen');
-const displayRoomId = document.getElementById('displayRoomId');
-const chatMessages = document.getElementById('chatMessages');
-
-// URL থেকে রুম আইডি চেক (Invite Link)
 const urlParams = new URLSearchParams(window.location.search);
-const roomParam = urlParams.get('room');
-if (roomParam) {
-    roomInput.value = roomParam;
+if (urlParams.get('room')) document.getElementById('roomInput').value = urlParams.get('room');
+
+function generate6DigitID() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// --- ৩. ক্যামেরা ও মাইক চালু করা ---
-startCamBtn.onclick = async () => {
+// --- ৩. ক্যামেরা চালু ---
+document.getElementById('startCamBtn').onclick = async () => {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480 }, 
-            audio: true 
-        });
-        localVideo.srcObject = localStream;
+        // Agora থেকে ক্যামেরা ও মাইক পারমিশন নেওয়া
+        [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
         
-        startCamBtn.style.display = 'none';
-        createRoomBtn.disabled = false;
-        joinRoomBtn.disabled = false;
-        console.log("ক্যামেরা ও অডিও রেডি!");
+        // নিজের ভিডিও 'local-player' বক্সে দেখানো
+        localTracks.videoTrack.play('local-player');
+
+        document.getElementById('startCamBtn').style.display = 'none';
+        document.getElementById('createRoomBtn').disabled = false;
+        document.getElementById('joinRoomBtn').disabled = false;
     } catch (error) {
-        console.error("Camera Error:", error);
-        alert("ক্যামেরা বা মাইক্রোফোন পারমিশন পাওয়া যায়নি! নিশ্চিত করুন আপনি HTTPS ব্যবহার করছেন।");
+        console.error("ক্যামেরা এরর:", error);
+        alert("ক্যামেরা বা মাইক্রোফোন পারমিশন পাওয়া যায়নি!");
     }
 };
 
-// --- ৪. মিটিং তৈরি ও জয়েন লজিক ---
-createRoomBtn.onclick = async () => {
-    currentRoom = Math.floor(100000 + Math.random() * 900000).toString();
-    await db.collection('rooms').doc(currentRoom).set({ created: true, createdAt: Date.now() });
-    enterMeetingRoom();
+// --- ৪. মিটিং তৈরি ও জয়েন ---
+document.getElementById('createRoomBtn').onclick = () => {
+    currentRoom = generate6DigitID();
+    joinMeeting(currentRoom);
 };
 
-joinRoomBtn.onclick = async () => {
-    currentRoom = roomInput.value.trim();
-    if (currentRoom.length !== 6) return alert("সঠিক ৬ ডিজিটের আইডি দিন!");
-    
-    const doc = await db.collection('rooms').doc(currentRoom).get();
-    if (!doc.exists) return alert("এই আইডি দিয়ে কোনো মিটিং খুঁজে পাওয়া যায়নি!");
-    
-    enterMeetingRoom();
-    // নতুন ইউজার জয়েন করেছে এই সিগন্যাল পাঠানো
-    db.collection('rooms').doc(currentRoom).collection('messages').add({
-        type: 'new-user', 
-        sender: myUserId, 
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
+document.getElementById('joinRoomBtn').onclick = () => {
+    currentRoom = document.getElementById('roomInput').value.trim();
+    if (currentRoom.length === 6) joinMeeting(currentRoom);
+    else alert("সঠিক ৬ ডিজিটের আইডি দিন!");
 };
 
-function enterMeetingRoom() {
-    joinScreen.style.display = 'none';
-    displayRoomId.innerText = currentRoom;
-    listenForSignaling(currentRoom);
-}
+async function joinMeeting(roomId) {
+    document.getElementById('join-screen').style.display = 'none';
+    document.getElementById('displayRoomId').innerText = roomId;
 
-// --- ৫. সিগন্যালিং এবং চ্যাট লজিক ---
-function sendSignal(receiverId, data) {
-    db.collection('rooms').doc(currentRoom).collection('messages').add({
-        ...data,
-        sender: myUserId,
-        receiver: receiverId,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    try {
+        // Agora সার্ভারে জয়েন করা
+        await client.join(APP_ID, roomId, null, null);
+        
+        // নিজের অডিও ও ভিডিও পাবলিশ করা
+        await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+        
+        // ফায়ারবেস চ্যাট অন করা
+        listenForChats(roomId);
+    } catch (e) {
+        console.error("জয়েন করতে সমস্যা:", e);
+    }
+
+    // অন্য কেউ জয়েন করলে (ভিডিও পাবলিশ করলে)
+    client.on("user-published", async (user, mediaType) => {
+        await client.subscribe(user, mediaType);
+        
+        if (mediaType === "video") {
+            let remoteBox = document.getElementById(`user-${user.uid}`);
+            if (!remoteBox) {
+                remoteBox = document.createElement("div");
+                remoteBox.id = `user-${user.uid}`;
+                remoteBox.className = "video-box";
+                videoGrid.appendChild(remoteBox);
+            }
+            user.videoTrack.play(remoteBox);
+        }
+        if (mediaType === "audio") {
+            user.audioTrack.play();
+        }
+    });
+
+    // কেউ মিটিং থেকে বের হয়ে গেলে
+    client.on("user-left", (user) => {
+        document.getElementById(`user-${user.uid}`)?.remove();
     });
 }
 
-function listenForSignaling(roomId) {
-    db.collection('rooms').doc(roomId).collection('messages').onSnapshot(snapshot => {
-        snapshot.docChanges().forEach(async change => {
+// --- ৫. Firebase চ্যাট লজিক ---
+const chatMessages = document.getElementById('chatMessages');
+const chatSidebar = document.getElementById('chatSidebar');
+const chatBadge = document.getElementById('chatBadge');
+
+function listenForChats(roomId) {
+    db.collection('rooms').doc(roomId).collection('chats').orderBy('timestamp').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
             if (change.type === 'added') {
                 const data = change.doc.data();
+                const isMyMsg = data.sender === myUserId;
                 
-                // ১. চ্যাট মেসেজ প্রসেসিং
-                if (data.type === 'chat') {
-                    const isMyMsg = data.sender === myUserId;
-                    const msgDiv = document.createElement('div');
-                    msgDiv.className = `chat-message ${isMyMsg ? 'my-msg' : ''}`;
-                    msgDiv.innerHTML = `<b style="font-size: 10px; opacity: 0.7;">${isMyMsg ? 'আপনি' : 'অন্যজন'}</b><br>${data.text}`;
-                    chatMessages.appendChild(msgDiv);
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                    return;
-                }
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `chat-message ${isMyMsg ? 'my-msg' : ''}`;
+                msgDiv.innerHTML = `<b style="font-size: 10px; opacity: 0.7;">${isMyMsg ? 'আপনি' : 'অন্যজন'}</b><br>${data.text}`;
+                chatMessages.appendChild(msgDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                if (data.sender === myUserId) return; // নিজের পাঠানো মেসেজ বাদ
-
-                // ২. WebRTC কানেকশন প্রসেসিং
-                if (data.type === 'new-user') {
-                    const pc = createPeerConnection(data.sender);
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    sendSignal(data.sender, { type: 'offer', sdp: offer });
-                }
-
-                if (data.receiver === myUserId) {
-                    if (data.type === 'offer') {
-                        const pc = createPeerConnection(data.sender);
-                        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        sendSignal(data.sender, { type: 'answer', sdp: answer });
-                    } 
-                    else if (data.type === 'answer') {
-                        const pc = peers[data.sender];
-                        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                    } 
-                    else if (data.type === 'candidate') {
-                        const pc = peers[data.sender];
-                        if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    }
+                if (!isMyMsg && chatSidebar.style.display !== 'flex') {
+                    unreadCount++;
+                    chatBadge.innerText = unreadCount;
+                    chatBadge.style.display = 'flex';
                 }
             }
         });
     });
 }
 
-// --- ৬. WebRTC Peer কানেকশন তৈরি ---
-function createPeerConnection(remoteUserId) {
-    if (peers[remoteUserId]) return peers[remoteUserId];
+// --- ৬. কন্ট্রোল বাটন লজিক ---
 
-    const pc = new RTCPeerConnection(servers);
-    peers[remoteUserId] = pc;
-
-    // নিজের ট্র্যাক কানেকশনে যুক্ত করা
-    if (localStream) {
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
-
-    // ICE Candidate পাঠানো
-    pc.onicecandidate = event => {
-        if (event.candidate) {
-            sendSignal(remoteUserId, { type: 'candidate', candidate: event.candidate.toJSON() });
-        }
-    };
-
-    // অপর পক্ষ থেকে ভিডিও আসলে তা দেখানো
-    pc.ontrack = event => {
-        let remoteVid = document.getElementById(`video-${remoteUserId}`);
-        if (!remoteVid) {
-            remoteVid = document.createElement('video');
-            remoteVid.id = `video-${remoteUserId}`;
-            remoteVid.autoplay = true;
-            remoteVid.playsInline = true;
-            videoGrid.appendChild(remoteVid);
-        }
-        remoteVid.srcObject = event.streams[0];
-    };
-
-    pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-            document.getElementById(`video-${remoteUserId}`)?.remove();
-            delete peers[remoteUserId];
-        }
-    };
-
-    return pc;
-}
-
-// --- ৭. কন্ট্রোল বাটন লজিক (Mic, Cam, Screen, Chat, Invite) ---
-
-// ইনভাইট লিংক কপি
+// ইনভাইট লিংক
 document.getElementById('inviteBtn').onclick = () => {
-    const inviteLink = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
-    navigator.clipboard.writeText(inviteLink).then(() => {
-        alert("মিটিং লিংক কপি হয়েছে! শেয়ার করুন:\n" + inviteLink);
-    });
+    const link = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
+    navigator.clipboard.writeText(link).then(() => alert("লিংক কপি হয়েছে!"));
 };
 
 // মিউট/আনমিউট
 let isMuted = false;
-document.getElementById('toggleMic').onclick = (e) => {
+document.getElementById('toggleMic').onclick = async (e) => {
     isMuted = !isMuted;
-    localStream.getAudioTracks()[0].enabled = !isMuted;
+    await localTracks.audioTrack.setMuted(isMuted);
     e.currentTarget.classList.toggle('active-off');
     e.currentTarget.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
 };
 
 // ক্যামেরা অন/অফ
 let isVidOff = false;
-document.getElementById('toggleCam').onclick = (e) => {
+document.getElementById('toggleCam').onclick = async (e) => {
     isVidOff = !isVidOff;
-    localStream.getVideoTracks()[0].enabled = !isVidOff;
+    await localTracks.videoTrack.setMuted(isVidOff);
     e.currentTarget.classList.toggle('active-off');
     e.currentTarget.innerHTML = isVidOff ? '<i class="fas fa-video-slash"></i>' : '<i class="fas fa-video"></i>';
 };
 
-// স্ক্রিন শেয়ার (GitHub Friendly লজিক)
-let sharing = false;
+// স্ক্রিন শেয়ার (Agora স্টাইল)
+let isSharingScreen = false;
 document.getElementById('shareScreenBtn').onclick = async (e) => {
     const btn = e.currentTarget;
-    if (!sharing) {
+    if (!isSharingScreen) {
         try {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-            const screenTrack = screenStream.getVideoTracks()[0];
+            // স্ক্রিন ট্র্যাক তৈরি করা
+            const screenTrackRes = await AgoraRTC.createScreenVideoTrack();
+            screenTrack = Array.isArray(screenTrackRes) ? screenTrackRes[0] : screenTrackRes;
 
-            Object.values(peers).forEach(pc => {
-                const sender = pc.getSenders().find(s => s.track.kind === 'video');
-                if (sender) sender.replaceTrack(screenTrack);
-            });
-
-            localVideo.srcObject = screenStream;
-            localVideo.style.transform = "scaleX(1)";
+            // বর্তমান ক্যামেরা সরিয়ে স্ক্রিন রিপ্লেস করা
+            await client.unpublish(localTracks.videoTrack);
+            await client.publish(screenTrack);
+            
+            // নিজের বক্সে স্ক্রিন দেখানো
+            screenTrack.play('local-player');
+            
             btn.classList.add('active-off');
-            sharing = true;
+            isSharingScreen = true;
 
-            screenTrack.onended = () => stopSharing(btn);
-        } catch (err) { console.error(err); }
+            // ব্রাউজারের 'Stop sharing' চাপলে
+            screenTrack.on("track-ended", () => stopSharing(btn));
+        } catch (err) { console.error("Screen share error", err); }
     } else {
         stopSharing(btn);
     }
 };
 
-function stopSharing(btn) {
-    const videoTrack = localStream.getVideoTracks()[0];
-    Object.values(peers).forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track.kind === 'video');
-        if (sender) sender.replaceTrack(videoTrack);
-    });
-    localVideo.srcObject = localStream;
-    localVideo.style.transform = "scaleX(-1)";
+async function stopSharing(btn) {
+    if (screenTrack) {
+        await client.unpublish(screenTrack);
+        screenTrack.close();
+        screenTrack = null;
+    }
+    // আবার ক্যামেরা ফিরিয়ে আনা
+    await client.publish(localTracks.videoTrack);
+    localTracks.videoTrack.play('local-player');
+    
     btn.classList.remove('active-off');
-    sharing = false;
+    isSharingScreen = false;
 }
 
-// চ্যাট ওপেন/ক্লোজ
+// চ্যাট ওপেন এবং মেসেজ পাঠানো
 document.getElementById('toggleChat').onclick = () => {
-    const sidebar = document.getElementById('chatSidebar');
-    sidebar.style.display = sidebar.style.display === 'none' ? 'flex' : 'none';
-};
-document.getElementById('closeChatBtn').onclick = () => {
-    document.getElementById('chatSidebar').style.display = 'none';
+    if (chatSidebar.style.display === 'none' || chatSidebar.style.display === '') {
+        chatSidebar.style.display = 'flex';
+        unreadCount = 0;
+        chatBadge.style.display = 'none';
+    } else {
+        chatSidebar.style.display = 'none';
+    }
 };
 
-// মেসেজ পাঠানো
+document.getElementById('closeChatBtn').onclick = () => chatSidebar.style.display = 'none';
+
 document.getElementById('sendChatBtn').onclick = () => {
     const input = document.getElementById('chatInput');
-    const msg = input.value.trim();
-    if (msg && currentRoom) {
-        db.collection('rooms').doc(currentRoom).collection('messages').add({
-            type: 'chat',
-            text: msg,
-            sender: myUserId,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    if (input.value.trim() && currentRoom) {
+        db.collection('rooms').doc(currentRoom).collection('chats').add({
+            text: input.value, sender: myUserId, timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         input.value = "";
     }
 };
 
-// মিটিং ত্যাগ করা
-document.getElementById('leaveMeeting').onclick = () => {
-    if (confirm("আপনি কি মিটিং ত্যাগ করতে চান?")) {
+// মিটিং লিভ করা
+document.getElementById('leaveMeeting').onclick = async () => {
+    if (confirm("মিটিং থেকে বের হতে চান?")) {
+        for (let trackName in localTracks) {
+            let track = localTracks[trackName];
+            if (track) { track.stop(); track.close(); }
+        }
+        await client.leave();
         window.location.href = window.location.origin + window.location.pathname;
     }
 };
