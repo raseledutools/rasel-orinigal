@@ -21,7 +21,6 @@ let myAgoraUid = null;
 let isAdmin = false; 
 let unreadCount = 0;
 
-// ডিফল্ট স্টেট (শুরুতে অন থাকবে)
 let state = { isMuted: false, isVidOff: false, isSharing: false };
 
 // URL চেক (লিংক থেকে আসলে)
@@ -33,7 +32,7 @@ if (roomFromUrl) {
     document.getElementById('join-link-ui').style.display = 'block';
 }
 
-// --- ৩. অটোমেটিক পারমিশন এবং ফোর্স সিঙ্ক ---
+// --- ৩. অটোমেটিক পারমিশন ---
 window.onload = async () => {
     try {
         [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
@@ -41,21 +40,14 @@ window.onload = async () => {
             { encoderConfig: "720p_1" }
         );
         
-        // ফোর্স করে হার্ডওয়্যার অন করা
-        await localTracks.audioTrack.setMuted(false);
-        await localTracks.videoTrack.setMuted(false);
-        
-        // প্রিভিউ প্লে করা
         localTracks.videoTrack.play('pre-join-player');
         
-        // UI সিঙ্ক করা
         syncUI();
         document.getElementById('loading-overlay').style.display = 'none';
     } catch (error) {
         console.error("Device Error:", error);
         document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>ক্যামেরা/মাইক পারমিশন দিন, না হলে মিটিংয়ে কথা বলতে পারবেন না!</p>";
         
-        // পারমিশন না দিলে বাটন অফ করে দেওয়া
         state.isMuted = true;
         state.isVidOff = true;
         syncUI();
@@ -101,7 +93,6 @@ async function toggleCam() {
     syncUI();
 }
 
-// ইভেন্ট লিসেনার
 document.getElementById('preMicBtn').onclick = toggleMic;
 document.getElementById('mainMicBtn').onclick = toggleMic;
 document.getElementById('preCamBtn').onclick = toggleCam;
@@ -130,40 +121,29 @@ document.getElementById('joinFromLinkBtn').onclick = () => {
     startMeeting(roomFromUrl);
 };
 
-// দ্য মেইন ম্যাজিক ফাংশন
+// দ্য মেইন ম্যাজিক ফাংশন (ডিলে ছাড়া)
 async function startMeeting(roomId) {
     currentRoom = roomId; 
 
-    // UI পরিবর্তন করা
     document.getElementById('setup-screen').style.display = 'none';
-    const mainMeeting = document.getElementById('main-meeting');
-    mainMeeting.style.display = 'flex';
-    
+    document.getElementById('main-meeting').style.display = 'flex';
     document.getElementById('displayRoomId').innerText = currentRoom;
     document.getElementById('my-name-badge').innerText = userName + (isAdmin ? " (Host)" : " (You)");
-    document.getElementById('local-box').setAttribute('data-uid', 'local');
 
-    // FIX 1: প্রি-জয়েন থেকে ভিডিও থামিয়ে দেওয়া
+    // FIX: কোনো Stop বা Delay ছাড়া সরাসরি ভিডিও নতুন ডিভে প্লে করে দেওয়া হলো
     if(localTracks.videoTrack) {
-        localTracks.videoTrack.stop();
+        localTracks.videoTrack.play('local-player');
     }
-
-    // FIX 2: ব্রাউজারকে মেইন স্ক্রিন রেন্ডার করার জন্য ১০০ মিলি-সেকেন্ড সময় দেওয়া, তারপর ভিডিও প্লে করা
-    setTimeout(async () => {
-        if (localTracks.videoTrack) {
-            localTracks.videoTrack.play('local-player');
-            await localTracks.videoTrack.setMuted(state.isVidOff); // রিয়েল স্টেট ফোর্স করা
-        }
-        if (localTracks.audioTrack) {
-            await localTracks.audioTrack.setMuted(state.isMuted); // রিয়েল স্টেট ফোর্স করা
-        }
-        syncUI(); // বাটন আবার সিঙ্ক করা
-    }, 100);
+    document.getElementById('local-box').setAttribute('data-uid', 'local');
+    
+    // UI সিঙ্ক করা (যাতে বাটনগুলোর রঙ ঠিক থাকে)
+    syncUI();
 
     try {
         myAgoraUid = await client.join(APP_ID, currentRoom, null, null);
         document.getElementById('local-box').id = `user-${myAgoraUid}`;
         
+        // পাবলিশ করার সময় আগের মিউট স্টেট অটোমেটিক কাজ করবে
         await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
         
         if (isAdmin) {
@@ -179,7 +159,6 @@ async function startMeeting(roomId) {
         window.location.reload();
     }
 
-    // অন্য কেউ জয়েন করলে (বা আগে থেকেই থাকলে)
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
         
