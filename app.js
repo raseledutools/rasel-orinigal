@@ -1,6 +1,6 @@
-// --- ১. কনফিগারেশন ---
+// --- 1. Configuration ---
 const APP_ID = "3581d419edb9484eb108db498e6bcdcf"; 
-const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" }); // VP8 is fastest for zero delay
 
 const firebaseConfig = {
     apiKey: "AIzaSyDGd3KAo45UuqmeGFALziz_oKm3htEASHY",
@@ -11,19 +11,17 @@ const firebaseConfig = {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// --- ২. গ্লোবাল ভ্যারিয়েবল ---
+// --- 2. Global Variables ---
 let localTracks = { videoTrack: null, audioTrack: null };
-let screenTrack = null;
 let currentRoom = null;
-let userName = "Rasel Mia"; 
+let userName = "Guest"; 
 const myUserId = Math.floor(Math.random() * 100000).toString(); 
 let myAgoraUid = null;
 let isAdmin = false; 
-let unreadCount = 0;
 
-let state = { isMuted: false, isVidOff: false, isSharing: false };
+// THE FIX: DEFAULT STATE IS OFF (True means Muted/Off)
+let state = { isMuted: true, isVidOff: true, isSharing: false };
 
-// URL চেক (লিংক থেকে আসলে)
 const urlParams = new URLSearchParams(window.location.search);
 const roomFromUrl = urlParams.get('room');
 
@@ -32,13 +30,20 @@ if (roomFromUrl) {
     document.getElementById('join-link-ui').style.display = 'block';
 }
 
-// --- ৩. অটোমেটিক পারমিশন ---
+// --- 3. Auto Load & Hardware Setup (Zero Delay Optimization) ---
 window.onload = async () => {
     try {
         [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-            { AEC: true, ANS: true, AGC: true, encoderConfig: "high_quality" }, 
-            { encoderConfig: "720p_1" }
+            { AEC: true, ANS: true, AGC: true }, // Echo and Noise cancellation
+            { 
+                encoderConfig: "480p_1", // Lower resolution = Zero network delay
+                optimizationMode: "motion" // THE MAGIC: Prioritizes instant real-time speed over 4K quality
+            }
         );
+        
+        // INSTANTLY TURN OFF HARDWARE
+        await localTracks.audioTrack.setEnabled(false);
+        await localTracks.videoTrack.setEnabled(false);
         
         localTracks.videoTrack.play('pre-join-player');
         
@@ -46,15 +51,14 @@ window.onload = async () => {
         document.getElementById('loading-overlay').style.display = 'none';
     } catch (error) {
         console.error("Device Error:", error);
-        document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>ক্যামেরা/মাইক পারমিশন দিন, না হলে মিটিংয়ে কথা বলতে পারবেন না!</p>";
-        
+        document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>Please allow Camera and Mic access!</p>";
         state.isMuted = true;
         state.isVidOff = true;
         syncUI();
     }
 };
 
-// --- ৪. সেন্ট্রাল বাটন সিঙ্ক ফাংশন ---
+// --- 4. Central Button UI Sync ---
 function syncUI() {
     const micBtns = [document.getElementById('preMicBtn'), document.getElementById('mainMicBtn')];
     micBtns.forEach(btn => {
@@ -69,27 +73,36 @@ function syncUI() {
     });
 
     const camBtns = [document.getElementById('preCamBtn'), document.getElementById('mainCamBtn')];
+    const camOffMsg = document.getElementById('camOffMsg');
+    
     camBtns.forEach(btn => {
         if (!btn) return;
         if (state.isVidOff) {
             btn.classList.add('active-off');
             btn.innerHTML = '<i class="fas fa-video-slash"></i>';
+            if(camOffMsg) camOffMsg.style.display = 'flex'; // Show black screen msg
         } else {
             btn.classList.remove('active-off');
             btn.innerHTML = '<i class="fas fa-video"></i>';
+            if(camOffMsg) camOffMsg.style.display = 'none'; // Hide msg
         }
     });
 }
 
+// TOGGLE LOGIC: setEnabled physically turns hardware on/off (Saves battery & bandwidth)
 async function toggleMic() {
     state.isMuted = !state.isMuted;
-    if (localTracks.audioTrack) await localTracks.audioTrack.setMuted(state.isMuted);
+    if (localTracks.audioTrack) {
+        await localTracks.audioTrack.setEnabled(!state.isMuted);
+    }
     syncUI();
 }
 
 async function toggleCam() {
     state.isVidOff = !state.isVidOff;
-    if (localTracks.videoTrack) await localTracks.videoTrack.setMuted(state.isVidOff);
+    if (localTracks.videoTrack) {
+        await localTracks.videoTrack.setEnabled(!state.isVidOff);
+    }
     syncUI();
 }
 
@@ -98,30 +111,27 @@ document.getElementById('mainMicBtn').onclick = toggleMic;
 document.getElementById('preCamBtn').onclick = toggleCam;
 document.getElementById('mainCamBtn').onclick = toggleCam;
 
-// --- ৫. মিটিং তৈরি এবং জয়েন ---
+// --- 5. Start Meeting ---
 document.getElementById('createRoomBtn').onclick = () => {
-    userName = document.getElementById('userNameDirect').value.trim() || userName;
-    const newRoomId = Math.floor(100000 + Math.random() * 900000).toString();
+    userName = document.getElementById('userNameDirect').value.trim() || "Host";
     isAdmin = true; 
-    startMeeting(newRoomId);
+    startMeeting(Math.floor(100000 + Math.random() * 900000).toString());
 };
 
 document.getElementById('joinRoomBtn').onclick = () => {
-    userName = document.getElementById('userNameDirect').value.trim() || userName;
+    userName = document.getElementById('userNameDirect').value.trim() || "Participant";
     const roomId = document.getElementById('roomInput').value.trim();
-    if (roomId.length === 6) {
-        isAdmin = false;
-        startMeeting(roomId);
-    } else { alert("সঠিক ৬ ডিজিটের আইডি দিন!"); }
+    if (roomId.length === 6) { isAdmin = false; startMeeting(roomId); } 
+    else { alert("Please enter a valid 6-digit ID!"); }
 };
 
 document.getElementById('joinFromLinkBtn').onclick = () => {
-    userName = document.getElementById('userNameLink').value.trim() || userName;
+    userName = document.getElementById('userNameLink').value.trim() || "Participant";
     isAdmin = false;
     startMeeting(roomFromUrl);
 };
 
-// দ্য মেইন ম্যাজিক ফাংশন (ডিলে ছাড়া)
+// Main join function
 async function startMeeting(roomId) {
     currentRoom = roomId; 
 
@@ -130,20 +140,18 @@ async function startMeeting(roomId) {
     document.getElementById('displayRoomId').innerText = currentRoom;
     document.getElementById('my-name-badge').innerText = userName + (isAdmin ? " (Host)" : " (You)");
 
-    // FIX: কোনো Stop বা Delay ছাড়া সরাসরি ভিডিও নতুন ডিভে প্লে করে দেওয়া হলো
+    // No need to stop/start track, just map it to the new div
     if(localTracks.videoTrack) {
         localTracks.videoTrack.play('local-player');
     }
     document.getElementById('local-box').setAttribute('data-uid', 'local');
-    
-    // UI সিঙ্ক করা (যাতে বাটনগুলোর রঙ ঠিক থাকে)
-    syncUI();
+    syncUI(); // Ensure UI matches the reality
 
     try {
         myAgoraUid = await client.join(APP_ID, currentRoom, null, null);
         document.getElementById('local-box').id = `user-${myAgoraUid}`;
         
-        // পাবলিশ করার সময় আগের মিউট স্টেট অটোমেটিক কাজ করবে
+        // It will publish empty stream if off, and real stream if on (Very Fast)
         await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
         
         if (isAdmin) {
@@ -154,11 +162,11 @@ async function startMeeting(roomId) {
         listenForChats(currentRoom);
         listenForRoomStatus(currentRoom); 
     } catch (e) {
-        console.error("Connection Error:", e);
-        alert("মিটিংয়ে জয়েন করতে সমস্যা হচ্ছে। আবার চেষ্টা করুন।");
+        alert("Failed to join. Check your internet connection.");
         window.location.reload();
     }
 
+    // When someone else joins
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
         
@@ -191,41 +199,37 @@ function updateGridCount() {
     grid.setAttribute('data-users', grid.children.length);
 }
 
-// --- ৬. স্মার্ট স্ক্রিন শেয়ার ---
-const shareBtn = document.getElementById('shareScreenBtn');
-
-shareBtn.onclick = async () => {
+// --- 6. Screen Share & Other Fixes ---
+let screenTrackObj = null;
+document.getElementById('shareScreenBtn').onclick = async (e) => {
+    const btn = e.currentTarget;
     if (!state.isSharing) {
         try {
-            const screenTrackRes = await AgoraRTC.createScreenVideoTrack({ encoderConfig: "1080p_1" });
-            screenTrack = Array.isArray(screenTrackRes) ? screenTrackRes[0] : screenTrackRes;
-
+            const screenTrackRes = await AgoraRTC.createScreenVideoTrack({ encoderConfig: "720p_1" });
+            screenTrackObj = Array.isArray(screenTrackRes) ? screenTrackRes[0] : screenTrackRes;
             await client.unpublish(localTracks.videoTrack);
-            await client.publish(screenTrack);
-            screenTrack.play(`user-${myAgoraUid}`);
+            await client.publish(screenTrackObj);
+            screenTrackObj.play(`user-${myAgoraUid}`);
             
             state.isSharing = true;
-            shareBtn.classList.add('active-off');
+            btn.classList.add('active-off');
             await db.collection('rooms').doc(currentRoom).update({ screenSharer: myAgoraUid });
 
-            screenTrack.on("track-ended", stopSharing);
-        } catch (err) { console.error(err); }
-    } else {
-        stopSharing();
-    }
+            screenTrackObj.on("track-ended", stopSharing);
+        } catch (err) { console.log(err); }
+    } else { stopSharing(); }
 };
 
 async function stopSharing() {
-    if (screenTrack) {
-        await client.unpublish(screenTrack);
-        screenTrack.close();
-        screenTrack = null;
+    if (screenTrackObj) {
+        await client.unpublish(screenTrackObj);
+        screenTrackObj.close();
+        screenTrackObj = null;
     }
     await client.publish(localTracks.videoTrack);
     localTracks.videoTrack.play(`user-${myAgoraUid}`);
-    
     state.isSharing = false;
-    shareBtn.classList.remove('active-off');
+    document.getElementById('shareScreenBtn').classList.remove('active-off');
     await db.collection('rooms').doc(currentRoom).update({ screenSharer: null });
 }
 
@@ -244,20 +248,23 @@ function listenForGrid() {
             if (activeBox) activeBox.classList.add('screen-active');
             
             if (data.screenSharer !== myAgoraUid) {
-                shareBtn.disabled = true; shareBtn.style.opacity = '0.5';
+                document.getElementById('shareScreenBtn').disabled = true; 
+                document.getElementById('shareScreenBtn').style.opacity = '0.5';
             }
         } else {
             grid.classList.remove('sharing-active');
-            shareBtn.disabled = false; shareBtn.style.opacity = '1';
+            document.getElementById('shareScreenBtn').disabled = false; 
+            document.getElementById('shareScreenBtn').style.opacity = '1';
         }
     });
 }
 
-// --- ৭. চ্যাট সিস্টেম ---
+// --- 7. Chat ---
+let unreadC = 0;
 document.getElementById('toggleChat').onclick = () => {
     const sb = document.getElementById('chatSidebar');
     sb.style.display = (sb.style.display === 'none' || !sb.style.display) ? 'flex' : 'none';
-    if (sb.style.display === 'flex') { unreadCount = 0; document.getElementById('chatBadge').style.display = 'none'; }
+    if (sb.style.display === 'flex') { unreadC = 0; document.getElementById('chatBadge').style.display = 'none'; }
 };
 document.getElementById('closeChatBtn').onclick = () => document.getElementById('chatSidebar').style.display = 'none';
 
@@ -275,22 +282,22 @@ function listenForChats(roomId) {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 const isMyMsg = data.sender === myUserId;
-                const nameStr = isMyMsg ? 'আপনি' : (data.senderName || 'Participant');
+                const nameStr = isMyMsg ? 'You' : (data.senderName || 'Participant');
                 document.getElementById('chatMessages').innerHTML += `<div class="chat-message ${isMyMsg ? 'my-msg' : ''}"><b style="font-size: 10px; opacity: 0.7;">${nameStr}</b><br>${data.text}</div>`;
                 document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
                 if (!isMyMsg && document.getElementById('chatSidebar').style.display !== 'flex') {
-                    unreadCount++; document.getElementById('chatBadge').innerText = unreadCount; document.getElementById('chatBadge').style.display = 'flex';
+                    unreadC++; document.getElementById('chatBadge').innerText = unreadC; document.getElementById('chatBadge').style.display = 'flex';
                 }
             }
         });
     });
 }
 
-// --- ৮. অ্যাডমিন এন্ড মিটিং এবং ডিলিট লজিক ---
-document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("লিংক কপি হয়েছে!"));
+// --- 8. Admin Leave ---
+document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("Link Copied!"));
 
 document.getElementById('leaveMeetingBtn').onclick = async () => {
-    const msg = isAdmin ? "আপনি কি মিটিংটি সবার জন্য শেষ করে দিতে চান? (চ্যাট ডিলিট হয়ে যাবে)" : "মিটিং থেকে বের হতে চান?";
+    const msg = isAdmin ? "End meeting for all? (Chat will be cleared)" : "Leave the meeting?";
     if (confirm(msg)) {
         if (isAdmin) {
             await db.collection('rooms').doc(currentRoom).update({ status: 'ended' });
@@ -300,11 +307,8 @@ document.getElementById('leaveMeetingBtn').onclick = async () => {
             await batch.commit();
             await db.collection('rooms').doc(currentRoom).delete();
         }
-        
         if(state.isSharing) await stopSharing();
-        localTracks.audioTrack?.close(); 
-        localTracks.videoTrack?.close();
-        await client.leave();
+        localTracks.audioTrack?.close(); localTracks.videoTrack?.close();
         window.location.href = window.location.pathname;
     }
 };
@@ -312,10 +316,9 @@ document.getElementById('leaveMeetingBtn').onclick = async () => {
 function listenForRoomStatus(roomId) {
     db.collection('rooms').doc(roomId).onSnapshot(doc => {
         if (doc.exists && doc.data().status === 'ended' && !isAdmin) {
-            alert("হোস্ট মিটিং শেষ করে দিয়েছেন।");
-            localTracks.audioTrack?.close(); 
-            localTracks.videoTrack?.close();
-            client.leave().then(() => { window.location.href = window.location.pathname; });
+            alert("The host ended the meeting.");
+            localTracks.audioTrack?.close(); localTracks.videoTrack?.close();
+            window.location.href = window.location.pathname;
         }
     });
 }
