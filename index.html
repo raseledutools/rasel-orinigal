@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom Clone - Multi-Peer Meeting</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 20px; text-align: center; }
+        .controls { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 20px; display: inline-block; }
+        button { background: #007bff; color: white; border: none; padding: 10px 15px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        input { padding: 10px; border-radius: 5px; border: 1px solid #ccc; margin: 5px; font-size: 16px; color: black; }
+        
+        #video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        video {
+            width: 100%;
+            border-radius: 10px;
+            background: #000;
+            border: 2px solid #333;
+            transform: scaleX(-1); /* মিরর ইফেক্ট */
+        }
+        .file-share { margin-top: 15px; padding-top: 15px; border-top: 1px solid #444; }
+        #shared-links { margin-top: 10px; text-align: left; }
+        #shared-links a { color: #00d2ff; text-decoration: none; display: block; margin: 5px 0; }
+    </style>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+</head>
+<body>
+
+    <h2>🎥 ওয়েবআরটিসি গ্রুপ মিটিং</h2>
+    
+    <div class="controls">
+        <button id="startCamBtn">১. ক্যামেরা চালু করুন</button>
+        <br>
+        <button id="createRoomBtn" disabled>নতুন রুম তৈরি করুন</button>
+        <br><br>
+        <input type="text" id="roomInput" placeholder="রুম আইডি দিন">
+        <button id="joinRoomBtn" disabled>রুমে জয়েন করুন</button>
+        <p>রুম আইডি: <strong id="currentRoomId" style="color: #00d2ff;">---</strong></p>
+
+        <div class="file-share">
+            <label for="fileInput">ফাইল শেয়ার করুন:</label>
+            <input type="file" id="fileInput">
+            <button id="uploadBtn">আপলোড</button>
+            <div id="shared-links"></div>
+        </div>
+    </div>
+
+    <div id="video-grid">
+        <video id="localVideo" autoplay playsinline muted></video>
+        </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
