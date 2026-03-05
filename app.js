@@ -11,120 +11,144 @@ const firebaseConfig = {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// --- ২. গ্লোবাল ভ্যারিয়েবল ---
+// --- ২. গ্লোবাল ভ্যারিয়েবল (Global States) ---
 let localTracks = { videoTrack: null, audioTrack: null };
 let screenTrack = null;
 let currentRoom = null;
 let userName = "Rasel Mia"; 
 const myUserId = Math.floor(Math.random() * 100000).toString(); 
 let myAgoraUid = null;
+let isAdmin = false; // অ্যাডমিন চেক করার জন্য
 let unreadCount = 0;
 
-let isMuted = false;
-let isVidOff = false;
-let isSharingScreen = false;
+// *ভেরি ইম্পর্ট্যান্ট* গ্লোবাল স্টেট (মাইক এবং ক্যামেরা)
+let state = {
+    isMuted: false,
+    isVidOff: false,
+    isSharing: false
+};
 
+// URL চেক (কেউ লিংক থেকে আসলে)
 const urlParams = new URLSearchParams(window.location.search);
-const roomFromUrl = urlParams.get('room');
-
-if (roomFromUrl) {
-    document.getElementById('direct-visit-ui').style.display = 'none';
-    document.getElementById('join-link-ui').style.display = 'block';
+if (urlParams.get('room')) {
+    document.getElementById('roomInput').value = urlParams.get('room');
 }
 
-// --- ৩. পেজ লোড (অডিও নয়েজ ফিক্স) ---
+// --- ৩. অটোমেটিক পারমিশন এবং প্রিভিউ (Window Load) ---
 window.onload = async () => {
     try {
-        // AEC (Echo Cancellation), ANS (Noise Suppression), AGC (Auto Gain) যুক্ত করা হলো
+        // ক্রিস্টাল ক্লিয়ার অডিওর জন্য
         [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
             { AEC: true, ANS: true, AGC: true, encoderConfig: "high_quality" }, 
             { encoderConfig: "720p_1" }
         );
+        
         localTracks.videoTrack.play('pre-join-player');
+        
+        // লোডিং স্ক্রিন সরিয়ে দেওয়া
+        document.getElementById('loading-overlay').style.display = 'none';
     } catch (error) {
-        alert("ক্যামেরা/মাইক পারমিশন দিন!");
+        document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>ক্যামেরা বা মাইকের পারমিশন দেওয়া হয়নি!</p>";
     }
 };
 
-// --- ৪. গ্রিড আপডেট লজিক ---
-function updateGridCount() {
-    const grid = document.getElementById('video-grid');
-    const count = grid.querySelectorAll('.video-box').length;
-    grid.setAttribute('data-users', count);
+// --- ৪. সেন্ট্রাল বাটন সিঙ্ক ফাংশন (যাতে বাটন উল্টাপাল্টা না হয়) ---
+function syncUI() {
+    // Mic Buttons
+    const micBtns = [document.getElementById('preMicBtn'), document.getElementById('mainMicBtn')];
+    micBtns.forEach(btn => {
+        if (!btn) return;
+        if (state.isMuted) {
+            btn.classList.add('active-off');
+            btn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+        } else {
+            btn.classList.remove('active-off');
+            btn.innerHTML = '<i class="fas fa-microphone"></i>';
+        }
+    });
+
+    // Camera Buttons
+    const camBtns = [document.getElementById('preCamBtn'), document.getElementById('mainCamBtn')];
+    camBtns.forEach(btn => {
+        if (!btn) return;
+        if (state.isVidOff) {
+            btn.classList.add('active-off');
+            btn.innerHTML = '<i class="fas fa-video-slash"></i>';
+        } else {
+            btn.classList.remove('active-off');
+            btn.innerHTML = '<i class="fas fa-video"></i>';
+        }
+    });
 }
 
-// --- ৫. প্রি-জয়েন কন্ট্রোল ---
-const preMicBtn = document.getElementById('preMicBtn');
-const preCamBtn = document.getElementById('preCamBtn');
-
-preMicBtn.onclick = async () => {
-    isMuted = !isMuted;
-    await localTracks.audioTrack.setMuted(isMuted);
-    updateBtnUI(preMicBtn, isMuted, 'fa-microphone', 'Mute', 'Unmute');
-};
-
-preCamBtn.onclick = async () => {
-    isVidOff = !isVidOff;
-    await localTracks.videoTrack.setMuted(isVidOff);
-    updateBtnUI(preCamBtn, isVidOff, 'fa-video', 'Stop Video', 'Start Video');
-};
-
-function updateBtnUI(btn, isOff, iconBase, textOff, textOn) {
-    if (isOff) {
-        btn.classList.add('active-off');
-        btn.innerHTML = `<i class="fas ${iconBase}-slash"></i>${textOn ? `<span>${textOn}</span>` : ''}`;
-    } else {
-        btn.classList.remove('active-off');
-        btn.innerHTML = `<i class="fas ${iconBase}"></i>${textOff ? `<span>${textOff}</span>` : ''}`;
-    }
+// বাটন ক্লিক হ্যান্ডলার
+async function toggleMic() {
+    state.isMuted = !state.isMuted;
+    if (localTracks.audioTrack) await localTracks.audioTrack.setMuted(state.isMuted);
+    syncUI();
 }
 
-// --- ৬. মিটিং জয়েন ---
+async function toggleCam() {
+    state.isVidOff = !state.isVidOff;
+    if (localTracks.videoTrack) await localTracks.videoTrack.setMuted(state.isVidOff);
+    syncUI();
+}
+
+// বাটনগুলোতে ইভেন্ট লিসেনার অ্যাড করা
+document.getElementById('preMicBtn').onclick = toggleMic;
+document.getElementById('mainMicBtn').onclick = toggleMic;
+document.getElementById('preCamBtn').onclick = toggleCam;
+document.getElementById('mainCamBtn').onclick = toggleCam;
+
+// --- ৫. মিটিং তৈরি এবং জয়েন ---
 document.getElementById('createRoomBtn').onclick = () => {
-    userName = document.getElementById('userNameDirect').value.trim() || userName;
+    userName = document.getElementById('userName').value.trim() || userName;
     currentRoom = Math.floor(100000 + Math.random() * 900000).toString();
+    isAdmin = true; // যে ক্রিয়েট করবে সে অ্যাডমিন
     startMeeting(currentRoom);
 };
 
 document.getElementById('joinRoomBtn').onclick = () => {
-    userName = document.getElementById('userNameDirect').value.trim() || userName;
-    const rm = document.getElementById('roomInput').value.trim();
-    if (rm.length === 6) startMeeting(rm); else alert("৬ ডিজিটের আইডি দিন!");
-};
-
-document.getElementById('joinFromLinkBtn').onclick = () => {
-    userName = document.getElementById('userNameLink').value.trim() || userName;
-    startMeeting(roomFromUrl);
+    userName = document.getElementById('userName').value.trim() || userName;
+    currentRoom = document.getElementById('roomInput').value.trim();
+    if (currentRoom.length === 6) {
+        isAdmin = false;
+        startMeeting(currentRoom);
+    } else {
+        alert("সঠিক ৬ ডিজিটের আইডি দিন!");
+    }
 };
 
 async function startMeeting(roomId) {
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('main-meeting').style.display = 'flex';
     document.getElementById('displayRoomId').innerText = roomId;
-    document.getElementById('my-name-badge').innerText = userName + " (You)";
+    document.getElementById('my-name-badge').innerText = userName + (isAdmin ? " (Host)" : " (You)");
 
+    // প্রি-জয়েন থেকে ভিডিও সরিয়ে মেইন প্লেয়ারে আনা
     localTracks.videoTrack.play('local-player');
     document.getElementById('local-box').setAttribute('data-uid', 'local');
 
-    updateBtnUI(document.getElementById('toggleMic'), isMuted, 'fa-microphone');
-    updateBtnUI(document.getElementById('toggleCam'), isVidOff, 'fa-video');
-
     try {
-        // Agora জয়েন করা
         myAgoraUid = await client.join(APP_ID, roomId, null, null);
-        document.getElementById('local-box').id = `user-${myAgoraUid}`; // বক্সের আইডি চেঞ্জ করা
+        document.getElementById('local-box').id = `user-${myAgoraUid}`;
         
         await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
         
-        // রুমের ডাটাবেজ তৈরি
-        await db.collection('rooms').doc(roomId).set({ active: true }, { merge: true });
-        
+        // অ্যাডমিন হলে ডাটাবেজে রুম তৈরি করবে
+        if (isAdmin) {
+            await db.collection('rooms').doc(roomId).set({ active: true, admin: myAgoraUid }, { merge: true });
+        }
+
+        listenForGrid();
         listenForChats(roomId);
-        listenForScreenShareState(roomId);
+        listenForRoomStatus(roomId); // রুম কেটে দেওয়া হলো কিনা চেক করা
     } catch (e) {
-        alert("কানেকশন ফেইল!");
+        alert("কানেকশনে সমস্যা! আবার চেষ্টা করুন।");
+        window.location.reload();
     }
 
+    // অন্যরা জয়েন করলে
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
         if (mediaType === "video") {
@@ -148,11 +172,16 @@ async function startMeeting(roomId) {
     });
 }
 
-// --- ৭. স্মার্ট স্ক্রিন শেয়ার (শুধু একজন পারবে) ---
+function updateGridCount() {
+    const grid = document.getElementById('video-grid');
+    grid.setAttribute('data-users', grid.children.length);
+}
+
+// --- ৬. স্মার্ট স্ক্রিন শেয়ার ---
 const shareBtn = document.getElementById('shareScreenBtn');
 
 shareBtn.onclick = async () => {
-    if (!isSharingScreen) {
+    if (!state.isSharing) {
         try {
             const screenTrackRes = await AgoraRTC.createScreenVideoTrack({ encoderConfig: "1080p_1" });
             screenTrack = Array.isArray(screenTrackRes) ? screenTrackRes[0] : screenTrackRes;
@@ -161,10 +190,8 @@ shareBtn.onclick = async () => {
             await client.publish(screenTrack);
             screenTrack.play(`user-${myAgoraUid}`);
             
-            isSharingScreen = true;
+            state.isSharing = true;
             shareBtn.classList.add('active-off');
-
-            // ফায়ারবেসে স্ট্যাটাস আপডেট (আমি শেয়ার করছি)
             await db.collection('rooms').doc(currentRoom).update({ screenSharer: myAgoraUid });
 
             screenTrack.on("track-ended", stopSharing);
@@ -183,54 +210,35 @@ async function stopSharing() {
     await client.publish(localTracks.videoTrack);
     localTracks.videoTrack.play(`user-${myAgoraUid}`);
     
-    isSharingScreen = false;
+    state.isSharing = false;
     shareBtn.classList.remove('active-off');
-    
-    // ফায়ারবেসে স্ট্যাটাস আপডেট (শেয়ার বন্ধ)
     await db.collection('rooms').doc(currentRoom).update({ screenSharer: null });
 }
 
-// ফায়ারবেস থেকে স্ক্রিন শেয়ারের স্ট্যাটাস শোনা
-function listenForScreenShareState(roomId) {
-    db.collection('rooms').doc(roomId).onSnapshot(doc => {
+function listenForGrid() {
+    db.collection('rooms').doc(currentRoom).onSnapshot(doc => {
+        if (!doc.exists) return;
         const data = doc.data();
         const grid = document.getElementById('video-grid');
         
-        // আগে সবার কাছ থেকে ফুল-স্ক্রিন ক্লাস সরিয়ে নিচ্ছি
         document.querySelectorAll('.video-box').forEach(box => box.classList.remove('screen-active'));
 
         if (data && data.screenSharer) {
             grid.classList.add('sharing-active');
-            
-            // যে শেয়ার করছে তার বক্স বড় করা
             const activeBox = document.getElementById(`user-${data.screenSharer}`);
             if (activeBox) activeBox.classList.add('screen-active');
             
-            // অন্য কেউ শেয়ার করলে আমার শেয়ার বাটন ডিজেবল করা
             if (data.screenSharer !== myAgoraUid) {
-                shareBtn.disabled = true;
-                shareBtn.style.opacity = '0.5';
+                shareBtn.disabled = true; shareBtn.style.opacity = '0.5';
             }
         } else {
             grid.classList.remove('sharing-active');
-            shareBtn.disabled = false;
-            shareBtn.style.opacity = '1';
+            shareBtn.disabled = false; shareBtn.style.opacity = '1';
         }
     });
 }
 
-// --- ৮. অন্যান্য কন্ট্রোল ---
-document.getElementById('toggleMic').onclick = async (e) => {
-    isMuted = !isMuted; await localTracks.audioTrack.setMuted(isMuted);
-    updateBtnUI(e.currentTarget, isMuted, 'fa-microphone');
-};
-document.getElementById('toggleCam').onclick = async (e) => {
-    isVidOff = !isVidOff; await localTracks.videoTrack.setMuted(isVidOff);
-    updateBtnUI(e.currentTarget, isVidOff, 'fa-video');
-};
-
-document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("লিংক কপি হয়েছে!"));
-
+// --- ৭. চ্যাট সিস্টেম ---
 document.getElementById('toggleChat').onclick = () => {
     const sb = document.getElementById('chatSidebar');
     sb.style.display = (sb.style.display === 'none' || !sb.style.display) ? 'flex' : 'none';
@@ -252,7 +260,7 @@ function listenForChats(roomId) {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 const isMyMsg = data.sender === myUserId;
-                const nameStr = isMyMsg ? 'আপনি' : (data.senderName || 'অন্যজন');
+                const nameStr = isMyMsg ? 'আপনি' : (data.senderName || 'Participant');
                 document.getElementById('chatMessages').innerHTML += `<div class="chat-message ${isMyMsg ? 'my-msg' : ''}"><b style="font-size: 10px; opacity: 0.7;">${nameStr}</b><br>${data.text}</div>`;
                 document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
                 if (!isMyMsg && document.getElementById('chatSidebar').style.display !== 'flex') {
@@ -263,11 +271,43 @@ function listenForChats(roomId) {
     });
 }
 
-document.getElementById('leaveMeeting').onclick = async () => {
-    if (confirm("মিটিং শেষ করতে চান?")) {
-        if(isSharingScreen) await stopSharing();
-        localTracks.audioTrack?.close(); localTracks.videoTrack?.close();
+// --- ৮. অ্যাডমিন এন্ড মিটিং এবং ডাটা ডিলিট লজিক ---
+document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("লিংক কপি হয়েছে!"));
+
+document.getElementById('leaveMeetingBtn').onclick = async () => {
+    const msg = isAdmin ? "আপনি কি মিটিংটি সবার জন্য শেষ করে দিতে চান? (চ্যাট ডিলিট হয়ে যাবে)" : "মিটিং থেকে বের হতে চান?";
+    if (confirm(msg)) {
+        if (isAdmin) {
+            // অ্যাডমিন হলে রুমের স্ট্যাটাস ended করে দেওয়া
+            await db.collection('rooms').doc(currentRoom).update({ status: 'ended' });
+            
+            // চ্যাট হিস্ট্রি ডিলিট করা
+            const chatDocs = await db.collection('rooms').doc(currentRoom).collection('chats').get();
+            const batch = db.batch();
+            chatDocs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            
+            // সবশেষে রুম ডিলিট
+            await db.collection('rooms').doc(currentRoom).delete();
+        }
+        
+        // লোকাল ক্লিনআপ
+        if(state.isSharing) await stopSharing();
+        localTracks.audioTrack?.close(); 
+        localTracks.videoTrack?.close();
         await client.leave();
         window.location.href = window.location.pathname;
     }
 };
+
+// অন্য ইউজাররা শুনবে কখন অ্যাডমিন মিটিং কেটে দিল
+function listenForRoomStatus(roomId) {
+    db.collection('rooms').doc(roomId).onSnapshot(doc => {
+        if (doc.exists && doc.data().status === 'ended' && !isAdmin) {
+            alert("হোস্ট মিটিং শেষ করে দিয়েছেন।");
+            localTracks.audioTrack?.close(); 
+            localTracks.videoTrack?.close();
+            client.leave().then(() => { window.location.href = window.location.pathname; });
+        }
+    });
+}
