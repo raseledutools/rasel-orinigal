@@ -1,6 +1,6 @@
 // --- 1. Configuration ---
-const APP_ID = "3581d419edb9484eb108db498e6bcdcf"; 
-const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" }); // VP8 is fastest for zero delay
+const APP_ID = "3581d419edb9484eb108db498e6bcdcf"; // MUST BE TESTING MODE APP ID
+const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
 const firebaseConfig = {
     apiKey: "AIzaSyDGd3KAo45UuqmeGFALziz_oKm3htEASHY",
@@ -19,7 +19,7 @@ const myUserId = Math.floor(Math.random() * 100000).toString();
 let myAgoraUid = null;
 let isAdmin = false; 
 
-// THE FIX: DEFAULT STATE IS OFF (True means Muted/Off)
+// THE FIX: App starts completely OFF
 let state = { isMuted: true, isVidOff: true, isSharing: false };
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -30,46 +30,33 @@ if (roomFromUrl) {
     document.getElementById('join-link-ui').style.display = 'block';
 }
 
-// --- 3. Auto Load & Hardware Setup (Zero Delay Optimization) ---
+// --- 3. Initial Setup ---
 window.onload = async () => {
     try {
         [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-            { AEC: true, ANS: true, AGC: true }, // Echo and Noise cancellation
-            { 
-                encoderConfig: "480p_1", // Lower resolution = Zero network delay
-                optimizationMode: "motion" // THE MAGIC: Prioritizes instant real-time speed over 4K quality
-            }
+            { AEC: true, ANS: true, AGC: true }, 
+            { encoderConfig: "480p_1", optimizationMode: "motion" }
         );
         
-        // INSTANTLY TURN OFF HARDWARE
         await localTracks.audioTrack.setEnabled(false);
         await localTracks.videoTrack.setEnabled(false);
         
         localTracks.videoTrack.play('pre-join-player');
-        
-        syncUI();
-        document.getElementById('loading-overlay').style.display = 'none';
     } catch (error) {
-        console.error("Device Error:", error);
-        document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>Please allow Camera and Mic access!</p>";
-        state.isMuted = true;
-        state.isVidOff = true;
-        syncUI();
+        console.warn("User denied camera/mic or device error.", error);
     }
+    
+    syncUI();
+    document.getElementById('loading-overlay').style.display = 'none';
 };
 
-// --- 4. Central Button UI Sync ---
+// --- 4. Controls UI Sync ---
 function syncUI() {
     const micBtns = [document.getElementById('preMicBtn'), document.getElementById('mainMicBtn')];
     micBtns.forEach(btn => {
         if (!btn) return;
-        if (state.isMuted) {
-            btn.classList.add('active-off');
-            btn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
-        } else {
-            btn.classList.remove('active-off');
-            btn.innerHTML = '<i class="fas fa-microphone"></i>';
-        }
+        btn.classList.toggle('active-off', state.isMuted);
+        btn.innerHTML = state.isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
     });
 
     const camBtns = [document.getElementById('preCamBtn'), document.getElementById('mainCamBtn')];
@@ -77,32 +64,21 @@ function syncUI() {
     
     camBtns.forEach(btn => {
         if (!btn) return;
-        if (state.isVidOff) {
-            btn.classList.add('active-off');
-            btn.innerHTML = '<i class="fas fa-video-slash"></i>';
-            if(camOffMsg) camOffMsg.style.display = 'flex'; // Show black screen msg
-        } else {
-            btn.classList.remove('active-off');
-            btn.innerHTML = '<i class="fas fa-video"></i>';
-            if(camOffMsg) camOffMsg.style.display = 'none'; // Hide msg
-        }
+        btn.classList.toggle('active-off', state.isVidOff);
+        btn.innerHTML = state.isVidOff ? '<i class="fas fa-video-slash"></i>' : '<i class="fas fa-video"></i>';
     });
+    if(camOffMsg) camOffMsg.style.display = state.isVidOff ? 'flex' : 'none';
 }
 
-// TOGGLE LOGIC: setEnabled physically turns hardware on/off (Saves battery & bandwidth)
 async function toggleMic() {
     state.isMuted = !state.isMuted;
-    if (localTracks.audioTrack) {
-        await localTracks.audioTrack.setEnabled(!state.isMuted);
-    }
+    if (localTracks.audioTrack) await localTracks.audioTrack.setEnabled(!state.isMuted);
     syncUI();
 }
 
 async function toggleCam() {
     state.isVidOff = !state.isVidOff;
-    if (localTracks.videoTrack) {
-        await localTracks.videoTrack.setEnabled(!state.isVidOff);
-    }
+    if (localTracks.videoTrack) await localTracks.videoTrack.setEnabled(!state.isVidOff);
     syncUI();
 }
 
@@ -111,87 +87,79 @@ document.getElementById('mainMicBtn').onclick = toggleMic;
 document.getElementById('preCamBtn').onclick = toggleCam;
 document.getElementById('mainCamBtn').onclick = toggleCam;
 
-// --- 5. Start Meeting ---
+// --- 5. Meeting Join Logic ---
 document.getElementById('createRoomBtn').onclick = () => {
-    userName = document.getElementById('userNameDirect').value.trim() || "Host";
+    userName = document.getElementById('userNameDirect').value || "Host";
     isAdmin = true; 
     startMeeting(Math.floor(100000 + Math.random() * 900000).toString());
 };
-
 document.getElementById('joinRoomBtn').onclick = () => {
-    userName = document.getElementById('userNameDirect').value.trim() || "Participant";
-    const roomId = document.getElementById('roomInput').value.trim();
-    if (roomId.length === 6) { isAdmin = false; startMeeting(roomId); } 
-    else { alert("Please enter a valid 6-digit ID!"); }
+    userName = document.getElementById('userNameDirect').value || "Guest";
+    const id = document.getElementById('roomInput').value;
+    if(id.length === 6) startMeeting(id); else alert("Enter a valid 6-digit ID!");
 };
-
 document.getElementById('joinFromLinkBtn').onclick = () => {
-    userName = document.getElementById('userNameLink').value.trim() || "Participant";
-    isAdmin = false;
+    userName = document.getElementById('userNameLink').value || "Guest";
     startMeeting(roomFromUrl);
 };
 
-// Main join function
 async function startMeeting(roomId) {
     currentRoom = roomId; 
-
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('main-meeting').style.display = 'flex';
     document.getElementById('displayRoomId').innerText = currentRoom;
     document.getElementById('my-name-badge').innerText = userName + (isAdmin ? " (Host)" : " (You)");
 
-    // No need to stop/start track, just map it to the new div
-    if(localTracks.videoTrack) {
-        localTracks.videoTrack.play('local-player');
-    }
+    if(localTracks.videoTrack) localTracks.videoTrack.play('local-player');
     document.getElementById('local-box').setAttribute('data-uid', 'local');
-    syncUI(); // Ensure UI matches the reality
+    syncUI();
 
     try {
         myAgoraUid = await client.join(APP_ID, currentRoom, null, null);
         document.getElementById('local-box').id = `user-${myAgoraUid}`;
         
-        // It will publish empty stream if off, and real stream if on (Very Fast)
-        await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+        // BUG FIX: Filter out null tracks before publishing!
+        let tracksToPublish = [];
+        if (localTracks.audioTrack) tracksToPublish.push(localTracks.audioTrack);
+        if (localTracks.videoTrack) tracksToPublish.push(localTracks.videoTrack);
         
-        if (isAdmin) {
-            await db.collection('rooms').doc(currentRoom).set({ active: true, admin: myAgoraUid }, { merge: true });
+        if (tracksToPublish.length > 0) {
+            await client.publish(tracksToPublish);
         }
+        
+        if (isAdmin) await db.collection('rooms').doc(currentRoom).set({ admin: myAgoraUid, active: true }, { merge: true });
 
-        listenForGrid();
         listenForChats(currentRoom);
-        listenForRoomStatus(currentRoom); 
+        listenForRoomStatus(currentRoom);
     } catch (e) {
-        alert("Failed to join. Check your internet connection.");
+        console.error("Agora Error Details:", e);
+        // Smart Error Alert
+        if (e.code === "CAN_NOT_GET_GATEWAY_SERVER" || e.message?.includes("token")) {
+            alert("CRITICAL ERROR: Your App ID is in 'Secure' mode! You must create a new App ID in 'Testing mode' from Agora Console.");
+        } else {
+            alert("Connection error. Check your network.");
+        }
         window.location.reload();
     }
 
-    // When someone else joins
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
-        
         if (mediaType === "video") {
-            let remoteBox = document.getElementById(`user-${user.uid}`);
-            if (!remoteBox) {
-                remoteBox = document.createElement("div");
-                remoteBox.id = `user-${user.uid}`;
-                remoteBox.className = "video-box";
-                remoteBox.innerHTML = `<span class="name-badge">Participant</span>`;
-                document.getElementById('video-grid').appendChild(remoteBox);
+            let rb = document.getElementById(`user-${user.uid}`);
+            if (!rb) {
+                rb = document.createElement("div");
+                rb.id = `user-${user.uid}`;
+                rb.className = "video-box";
+                rb.innerHTML = `<span class="name-badge">Participant</span>`;
+                document.getElementById('video-grid').appendChild(rb);
             }
-            user.videoTrack.play(remoteBox.id);
+            user.videoTrack.play(rb.id);
             updateGridCount();
         }
-        
-        if (mediaType === "audio") {
-            user.audioTrack.play();
-        }
+        if (mediaType === "audio") user.audioTrack.play();
     });
 
-    client.on("user-left", (user) => {
-        document.getElementById(`user-${user.uid}`)?.remove();
-        updateGridCount();
-    });
+    client.on("user-left", (user) => { document.getElementById(`user-${user.uid}`)?.remove(); updateGridCount(); });
 }
 
 function updateGridCount() {
@@ -199,67 +167,9 @@ function updateGridCount() {
     grid.setAttribute('data-users', grid.children.length);
 }
 
-// --- 6. Screen Share & Other Fixes ---
-let screenTrackObj = null;
-document.getElementById('shareScreenBtn').onclick = async (e) => {
-    const btn = e.currentTarget;
-    if (!state.isSharing) {
-        try {
-            const screenTrackRes = await AgoraRTC.createScreenVideoTrack({ encoderConfig: "720p_1" });
-            screenTrackObj = Array.isArray(screenTrackRes) ? screenTrackRes[0] : screenTrackRes;
-            await client.unpublish(localTracks.videoTrack);
-            await client.publish(screenTrackObj);
-            screenTrackObj.play(`user-${myAgoraUid}`);
-            
-            state.isSharing = true;
-            btn.classList.add('active-off');
-            await db.collection('rooms').doc(currentRoom).update({ screenSharer: myAgoraUid });
+// --- 6. Controls & Chat ---
+document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("Meeting Link Copied!"));
 
-            screenTrackObj.on("track-ended", stopSharing);
-        } catch (err) { console.log(err); }
-    } else { stopSharing(); }
-};
-
-async function stopSharing() {
-    if (screenTrackObj) {
-        await client.unpublish(screenTrackObj);
-        screenTrackObj.close();
-        screenTrackObj = null;
-    }
-    await client.publish(localTracks.videoTrack);
-    localTracks.videoTrack.play(`user-${myAgoraUid}`);
-    state.isSharing = false;
-    document.getElementById('shareScreenBtn').classList.remove('active-off');
-    await db.collection('rooms').doc(currentRoom).update({ screenSharer: null });
-}
-
-function listenForGrid() {
-    if(!currentRoom) return;
-    db.collection('rooms').doc(currentRoom).onSnapshot(doc => {
-        if (!doc.exists) return;
-        const data = doc.data();
-        const grid = document.getElementById('video-grid');
-        
-        document.querySelectorAll('.video-box').forEach(box => box.classList.remove('screen-active'));
-
-        if (data && data.screenSharer) {
-            grid.classList.add('sharing-active');
-            const activeBox = document.getElementById(`user-${data.screenSharer}`);
-            if (activeBox) activeBox.classList.add('screen-active');
-            
-            if (data.screenSharer !== myAgoraUid) {
-                document.getElementById('shareScreenBtn').disabled = true; 
-                document.getElementById('shareScreenBtn').style.opacity = '0.5';
-            }
-        } else {
-            grid.classList.remove('sharing-active');
-            document.getElementById('shareScreenBtn').disabled = false; 
-            document.getElementById('shareScreenBtn').style.opacity = '1';
-        }
-    });
-}
-
-// --- 7. Chat ---
 let unreadC = 0;
 document.getElementById('toggleChat').onclick = () => {
     const sb = document.getElementById('chatSidebar');
@@ -293,12 +203,8 @@ function listenForChats(roomId) {
     });
 }
 
-// --- 8. Admin Leave ---
-document.getElementById('inviteBtn').onclick = () => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?room=${currentRoom}`).then(() => alert("Link Copied!"));
-
 document.getElementById('leaveMeetingBtn').onclick = async () => {
-    const msg = isAdmin ? "End meeting for all? (Chat will be cleared)" : "Leave the meeting?";
-    if (confirm(msg)) {
+    if (confirm(isAdmin ? "End meeting for all?" : "Leave the meeting?")) {
         if (isAdmin) {
             await db.collection('rooms').doc(currentRoom).update({ status: 'ended' });
             const chatDocs = await db.collection('rooms').doc(currentRoom).collection('chats').get();
@@ -307,7 +213,6 @@ document.getElementById('leaveMeetingBtn').onclick = async () => {
             await batch.commit();
             await db.collection('rooms').doc(currentRoom).delete();
         }
-        if(state.isSharing) await stopSharing();
         localTracks.audioTrack?.close(); localTracks.videoTrack?.close();
         window.location.href = window.location.pathname;
     }
