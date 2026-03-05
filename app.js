@@ -30,13 +30,12 @@ const joinScreen = document.getElementById('join-screen');
 const displayRoomId = document.getElementById('displayRoomId');
 const chatMessages = document.getElementById('chatMessages');
 
-// URL থেকে রুম আইডি নেওয়া (Invite Link এর জন্য)
+// URL থেকে রুম আইডি নেওয়া
 const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get('room')) {
     roomInput.value = urlParams.get('room');
 }
 
-// ৬ ডিজিট আইডি জেনারেটর
 function generate6DigitID() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -44,14 +43,17 @@ function generate6DigitID() {
 // --- ৩. ক্যামেরা ও মাইক চালু ---
 startCamBtn.onclick = async () => {
     try {
+        // স্ক্রিন শেয়ার এবং ভিডিওর জন্য পারমিশন
         localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360 }, audio: true });
         localVideo.srcObject = localStream;
         
         startCamBtn.style.display = 'none';
         createRoomBtn.disabled = false;
         joinRoomBtn.disabled = false;
+        console.log("ক্যামেরা চালু হয়েছে!");
     } catch (error) {
-        alert("ক্যামেরা বা মাইক্রোফোন পারমিশন দেওয়া হয়নি!");
+        console.error("Camera Error:", error);
+        alert("ক্যামেরা বা মাইক্রোফোন পারমিশন দেওয়া হয়নি অথবা ফাইলটি Live Server-এ ওপেন করা হয়নি!");
     }
 };
 
@@ -87,45 +89,50 @@ function sendSignal(receiverId, data) {
 }
 
 function listenForSignaling(roomId) {
-    db.collection('rooms').doc(roomId).collection('messages').orderBy('timestamp').onSnapshot(snapshot => {
+    // FIX: orderBy('timestamp') মুছে দেওয়া হয়েছে যাতে Firebase Error না দেয়
+    db.collection('rooms').doc(roomId).collection('messages').onSnapshot(snapshot => {
         snapshot.docChanges().forEach(async change => {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 
-                // চ্যাট মেসেজ রিসিভ করা
+                // চ্যাট মেসেজ
                 if (data.type === 'chat') {
                     const isMyMsg = data.sender === myUserId;
                     chatMessages.innerHTML += `<div class="chat-message ${isMyMsg ? 'my-msg' : ''}">
                         <b style="font-size: 10px; opacity: 0.7;">${isMyMsg ? 'আপনি' : 'অন্যজন'}</b><br>${data.text}
                     </div>`;
-                    chatMessages.scrollTop = chatMessages.scrollHeight; // Auto scroll
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
                     return;
                 }
 
                 if (data.sender === myUserId) return; // নিজের সিগন্যাল ইগনোর
 
                 // WebRTC Signaling
-                if (data.type === 'new-user') {
-                    const pc = createPeerConnection(data.sender);
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    sendSignal(data.sender, { type: 'offer', sdp: offer });
-                }
-
-                if (data.receiver === myUserId) {
-                    if (data.type === 'offer') {
+                try {
+                    if (data.type === 'new-user') {
                         const pc = createPeerConnection(data.sender);
-                        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        sendSignal(data.sender, { type: 'answer', sdp: answer });
-                    } else if (data.type === 'answer') {
-                        const pc = peers[data.sender];
-                        if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                    } else if (data.type === 'ice-candidate') {
-                        const pc = peers[data.sender];
-                        if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        sendSignal(data.sender, { type: 'offer', sdp: offer });
                     }
+
+                    if (data.receiver === myUserId) {
+                        if (data.type === 'offer') {
+                            const pc = createPeerConnection(data.sender);
+                            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                            const answer = await pc.createAnswer();
+                            await pc.setLocalDescription(answer);
+                            sendSignal(data.sender, { type: 'answer', sdp: answer });
+                        } else if (data.type === 'answer') {
+                            const pc = peers[data.sender];
+                            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                        } else if (data.type === 'ice-candidate') {
+                            const pc = peers[data.sender];
+                            if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        }
+                    }
+                } catch (err) {
+                    console.error("WebRTC Error:", err);
                 }
             }
         });
@@ -139,7 +146,6 @@ function createPeerConnection(remoteUserId) {
     const pc = new RTCPeerConnection(servers);
     peers[remoteUserId] = pc;
 
-    // নিজের ভিডিও পাঠানো
     if (localStream) {
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
@@ -161,7 +167,7 @@ function createPeerConnection(remoteUserId) {
     };
 
     pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             document.getElementById(`video-${remoteUserId}`)?.remove();
             delete peers[remoteUserId];
         }
@@ -170,7 +176,7 @@ function createPeerConnection(remoteUserId) {
     return pc;
 }
 
-// --- ৭. কন্ট্রোল বাটনগুলো (UI Controls) ---
+// --- ৭. কন্ট্রোল বাটনগুলো ---
 
 // Invite Link
 document.getElementById('inviteBtn').onclick = () => {
@@ -196,51 +202,57 @@ document.getElementById('toggleCam').onclick = (e) => {
     e.currentTarget.innerHTML = isVideoOff ? '<i class="fas fa-video-slash"></i>' : '<i class="fas fa-video"></i>';
 };
 
-// Screen Share
+// Screen Share (FIXED)
 let isSharingScreen = false;
 document.getElementById('shareScreenBtn').onclick = async (e) => {
+    const btnElement = e.currentTarget;
+    
     if (!isSharingScreen) {
         try {
             screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             const screenTrack = screenStream.getVideoTracks()[0];
             
-            // সব পিয়ারকে স্ক্রিন ট্র্যাক পাঠানো
             Object.values(peers).forEach(pc => {
                 const sender = pc.getSenders().find(s => s.track.kind === 'video');
                 if (sender) sender.replaceTrack(screenTrack);
             });
-            localVideo.srcObject = screenStream; // নিজের স্ক্রিনে দেখানো
-            localVideo.style.transform = 'scaleX(1)'; // স্ক্রিন শেয়ারে মিরর অফ করা
             
-            e.currentTarget.classList.add('active-off');
+            localVideo.srcObject = screenStream;
+            localVideo.style.transform = 'scaleX(1)'; 
+            
+            btnElement.classList.add('active-off');
             isSharingScreen = true;
 
-            // Stop sharing চাপলে
-            screenTrack.onended = () => stopScreenShare(e.currentTarget);
-        } catch (err) { console.error("Screen share error", err); }
+            // ব্রাউজারের ডিফল্ট "Stop Sharing" বাটনে ক্লিক করলে
+            screenTrack.onended = () => stopScreenShare(btnElement);
+        } catch (err) { 
+            console.error("Screen share error: Browser permission denied or not supported.", err); 
+        }
     } else {
-        stopScreenShare(e.currentTarget);
+        stopScreenShare(btnElement);
     }
 };
 
 function stopScreenShare(btnElement) {
+    if(!localStream) return;
     const videoTrack = localStream.getVideoTracks()[0];
+    
     Object.values(peers).forEach(pc => {
         const sender = pc.getSenders().find(s => s.track.kind === 'video');
         if (sender) sender.replaceTrack(videoTrack);
     });
+    
     localVideo.srcObject = localStream;
     localVideo.style.transform = 'scaleX(-1)';
     btnElement.classList.remove('active-off');
     isSharingScreen = false;
 }
 
-// Chat Box Toggle
+// Chat toggle & Send
 const chatSidebar = document.getElementById('chatSidebar');
 document.getElementById('toggleChat').onclick = () => chatSidebar.style.display = 'flex';
 document.getElementById('closeChatBtn').onclick = () => chatSidebar.style.display = 'none';
 
-// Send Chat Message
 document.getElementById('sendChatBtn').onclick = () => {
     const input = document.getElementById('chatInput');
     if (input.value.trim() && currentRoom) {
@@ -251,7 +263,6 @@ document.getElementById('sendChatBtn').onclick = () => {
     }
 };
 
-// Leave Meeting
 document.getElementById('leaveMeeting').onclick = () => {
     if(confirm("মিটিং থেকে বের হতে চান?")) window.location.href = window.location.pathname;
 };
