@@ -3,22 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Meeting App</title>
+    <title>Pro Meeting App (Agora + Firebase)</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #111; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Header */
         .header { background: #222; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
         .room-info { font-size: 16px; }
         .invite-btn { background: #0b5cff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         
-        /* Main Area (Video + Chat) */
         .main-area { display: flex; flex: 1; height: calc(100vh - 130px); position: relative; overflow: hidden; }
         .video-container { flex: 1; padding: 10px; display: flex; align-items: center; justify-content: center; overflow-y: auto; }
         #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; width: 100%; max-width: 1200px; align-content: center; }
-        video { width: 100%; border-radius: 12px; background: #000; border: 2px solid #333; object-fit: cover; aspect-ratio: 16/9; transform: scaleX(-1); }
+        
+        /* Agora Video Box Style */
+        .video-box { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: #000; border: 2px solid #333; overflow: hidden; position: relative; }
+        .video-box video { object-fit: cover !important; }
         
         /* Chat Sidebar */
         .chat-sidebar { width: 320px; background: #1a1a1a; border-left: 1px solid #333; display: none; flex-direction: column; z-index: 50; }
@@ -31,23 +33,19 @@
         .chat-input-area input { flex: 1; padding: 10px; border-radius: 5px; border: none; background: #111; color: white; outline: none; }
         .chat-input-area button { background: #0b5cff; border: none; color: white; padding: 10px 15px; margin-left: 5px; border-radius: 5px; cursor: pointer; }
 
-        /* Bottom Controls */
         .controls-bar { background: #222; min-height: 70px; display: flex; justify-content: center; align-items: center; gap: 15px; border-top: 1px solid #333; flex-wrap: wrap; padding: 10px; }
         .control-btn { background: #333; color: white; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; justify-content: center; align-items: center; position: relative; }
         .control-btn.danger { background: #ff4a4a; }
         .control-btn.active-off { background: #ff4a4a; }
 
-        /* Notification Badge */
         .chat-badge { position: absolute; top: -5px; right: -5px; background: #ff4a4a; color: white; font-size: 12px; font-weight: bold; width: 22px; height: 22px; border-radius: 50%; display: none; align-items: center; justify-content: center; border: 2px solid #222; }
 
-        /* Join Screen */
         #join-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
         .join-box { background: #222; padding: 30px; border-radius: 10px; text-align: center; width: 100%; max-width: 350px; }
         .join-box input { width: 100%; padding: 12px; margin: 15px 0; border-radius: 5px; border: none; font-size: 16px; text-align: center; font-weight: bold; }
         .join-box button { width: 100%; padding: 12px; background: #0b5cff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-bottom: 10px; font-weight: bold; }
         .join-box button:disabled { background: #555; cursor: not-allowed; }
 
-        /* --- MOBILE RESPONSIVE CSS --- */
         @media (max-width: 768px) {
             .header { flex-direction: column; gap: 10px; }
             #video-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
@@ -56,6 +54,7 @@
         }
     </style>
     
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.18.0.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
@@ -80,7 +79,7 @@
     <div class="main-area">
         <div class="video-container">
             <div id="video-grid">
-                <video id="localVideo" autoplay playsinline muted></video>
+                <div id="local-player" class="video-box"></div>
             </div>
         </div>
         
