@@ -3,54 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Zoom Clone</title>
+    <title>Pro Meeting App</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 20px; text-align: center; }
-        .controls { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 20px; display: inline-block; }
-        button { background: #007bff; color: white; border: none; padding: 10px 15px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold;}
-        button:hover { background: #0056b3; }
-        button:disabled { background: #555; cursor: not-allowed; }
-        input { padding: 10px; border-radius: 5px; border: 1px solid #ccc; margin: 5px; font-size: 16px; color: black; text-align: center;}
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #111; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        #video-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-        video {
-            width: 100%;
-            border-radius: 10px;
-            background: #222;
-            border: 2px solid #444;
-            transform: scaleX(-1);
-        }
-        #currentRoomId { color: #00ff88; font-size: 24px; letter-spacing: 2px; }
-    </style>
+        /* Header */
+        .header { background: #222; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+        .room-info { font-size: 16px; }
+        .invite-btn { background: #0b5cff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .invite-btn:hover { background: #0046d1; }
 
+        /* Main Area (Video + Chat) */
+        .main-area { display: flex; flex: 1; height: calc(100vh - 130px); position: relative; }
+        .video-container { flex: 1; padding: 20px; display: flex; align-items: center; justify-content: center; overflow-y: auto; }
+        #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; width: 100%; max-width: 1200px; }
+        video { width: 100%; border-radius: 12px; background: #000; border: 2px solid #333; object-fit: cover; aspect-ratio: 16/9; transform: scaleX(-1); }
+        
+        /* Chat Sidebar */
+        .chat-sidebar { width: 320px; background: #1a1a1a; border-left: 1px solid #333; display: none; flex-direction: column; transition: 0.3s; }
+        .chat-header { padding: 15px; background: #222; border-bottom: 1px solid #333; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .close-chat { cursor: pointer; color: #ff4a4a; }
+        .chat-messages { flex: 1; padding: 15px; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 10px; }
+        .chat-message { background: #333; padding: 8px 12px; border-radius: 8px; width: fit-content; max-width: 80%; word-break: break-word; }
+        .chat-message.my-msg { background: #0b5cff; align-self: flex-end; }
+        .chat-input-area { padding: 10px; display: flex; border-top: 1px solid #333; background: #222; }
+        .chat-input-area input { flex: 1; padding: 10px; border-radius: 5px; border: none; outline: none; background: #111; color: white; }
+        .chat-input-area button { background: #0b5cff; border: none; color: white; padding: 10px 15px; margin-left: 5px; border-radius: 5px; cursor: pointer; }
+
+        /* Bottom Controls */
+        .controls-bar { background: #222; height: 70px; display: flex; justify-content: center; align-items: center; gap: 15px; border-top: 1px solid #333; }
+        .control-btn { background: #333; color: white; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 18px; cursor: pointer; transition: 0.2s; display: flex; justify-content: center; align-items: center; }
+        .control-btn:hover { background: #444; }
+        .control-btn.danger { background: #ff4a4a; }
+        .control-btn.danger:hover { background: #d83a3a; }
+        .control-btn.active-off { background: #ff4a4a; }
+
+        /* Join Screen Overlay */
+        #join-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .join-box { background: #222; padding: 30px; border-radius: 10px; text-align: center; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .join-box input { width: 100%; padding: 12px; margin: 15px 0; border-radius: 5px; border: none; font-size: 16px; text-align: center; font-weight: bold; letter-spacing: 2px; }
+        .join-box button { width: 100%; padding: 12px; background: #0b5cff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-bottom: 10px; font-weight: bold; transition: 0.2s; }
+        .join-box button:hover { background: #0046d1; }
+        .join-box button:disabled { background: #555; cursor: not-allowed; }
+    </style>
+    
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
-    <h2>🎥 ৬-ডিজিট আইডির গ্রুপ মিটিং</h2>
-    
-    <div class="controls">
-        <button id="startCamBtn">১. ক্যামেরা ও মাইক চালু করুন</button>
-        <br><br>
-        <button id="createRoomBtn" disabled>নতুন মিটিং তৈরি করুন</button>
-        <p>আপনার মিটিং আইডি: <strong id="currentRoomId">------</strong></p>
-        <hr style="border-color: #333;">
-        <input type="text" id="roomInput" placeholder="৬ ডিজিটের আইডি দিন" maxlength="6">
-        <button id="joinRoomBtn" disabled>মিটিংয়ে জয়েন করুন</button>
+    <div id="join-screen">
+        <div class="join-box">
+            <h2 style="margin-bottom: 20px; color: #0b5cff;"><i class="fas fa-video"></i> প্রো মিটিং</h2>
+            <button id="startCamBtn"><i class="fas fa-camera"></i> ১. ক্যামেরা ও মাইক চালু করুন</button>
+            <button id="createRoomBtn" disabled><i class="fas fa-plus"></i> নতুন মিটিং তৈরি করুন</button>
+            
+            <div style="margin: 20px 0; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <hr style="flex: 1; border-color: #444;"><span style="color: #888;">অথবা</span><hr style="flex: 1; border-color: #444;">
+            </div>
+            
+            <input type="text" id="roomInput" placeholder="৬ ডিজিটের আইডি দিন" maxlength="6">
+            <button id="joinRoomBtn" disabled><i class="fas fa-sign-in-alt"></i> মিটিংয়ে জয়েন করুন</button>
+        </div>
     </div>
 
-    <div id="video-grid">
-        <video id="localVideo" autoplay playsinline muted></video>
+    <div class="header">
+        <div class="room-info">মিটিং আইডি: <strong id="displayRoomId" style="color: #00ff88; letter-spacing: 2px;">------</strong></div>
+        <button class="invite-btn" id="inviteBtn"><i class="fas fa-link"></i> ইনভাইট লিংক কপি</button>
     </div>
 
-    <script src="webrtc.js"></script>
+    <div class="main-area">
+        <div class="video-container">
+            <div id="video-grid">
+                <video id="localVideo" autoplay playsinline muted></video>
+            </div>
+        </div>
+        
+        <div class="chat-sidebar" id="chatSidebar">
+            <div class="chat-header">
+                <span><i class="fas fa-comments"></i> চ্যাট বক্স</span>
+                <i class="fas fa-times close-chat" id="closeChatBtn"></i>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="মেসেজ লিখুন...">
+                <button id="sendChatBtn"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls-bar">
+        <button class="control-btn" id="toggleMic" title="Mute/Unmute"><i class="fas fa-microphone"></i></button>
+        <button class="control-btn" id="toggleCam" title="Video On/Off"><i class="fas fa-video"></i></button>
+        <button class="control-btn" id="shareScreenBtn" title="Share Screen"><i class="fas fa-desktop"></i></button>
+        <button class="control-btn" id="toggleChat" title="Chat"><i class="fas fa-comment-alt"></i></button>
+        <button class="control-btn danger" id="leaveMeeting" title="Leave"><i class="fas fa-phone-slash"></i></button>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
