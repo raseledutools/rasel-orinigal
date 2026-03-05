@@ -21,6 +21,7 @@ let myAgoraUid = null;
 let isAdmin = false; 
 let unreadCount = 0;
 
+// ডিফল্ট স্টেট (শুরুতে অন থাকবে)
 let state = { isMuted: false, isVidOff: false, isSharing: false };
 
 // URL চেক (লিংক থেকে আসলে)
@@ -32,16 +33,24 @@ if (roomFromUrl) {
     document.getElementById('join-link-ui').style.display = 'block';
 }
 
-// --- ৩. অটোমেটিক পারমিশন ---
+// --- ৩. অটোমেটিক পারমিশন এবং ফোর্স সিঙ্ক ---
 window.onload = async () => {
     try {
         [localTracks.audioTrack, localTracks.videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
             { AEC: true, ANS: true, AGC: true, encoderConfig: "high_quality" }, 
             { encoderConfig: "720p_1" }
         );
+        
         localTracks.videoTrack.play('pre-join-player');
+
+        // FIX: হার্ডওয়্যার এবং UI ফোর্স সিঙ্ক করা
+        await localTracks.audioTrack.setMuted(state.isMuted);
+        await localTracks.videoTrack.setMuted(state.isVidOff);
+        syncUI();
+
+        document.getElementById('loading-overlay').style.display = 'none';
     } catch (error) {
-        alert("ক্যামেরা/মাইক পারমিশন দিন, না হলে মিটিংয়ে কথা বলতে পারবেন না!");
+        document.getElementById('loading-overlay').innerHTML = "<p style='color:red;'>ক্যামেরা/মাইক পারমিশন দিন, না হলে মিটিংয়ে কথা বলতে পারবেন না!</p>";
     }
 };
 
@@ -112,9 +121,8 @@ document.getElementById('joinFromLinkBtn').onclick = () => {
     startMeeting(roomFromUrl);
 };
 
-// দ্য মেইন ম্যাজিক ফাংশন
+// মেইন মিটিং ফাংশন
 async function startMeeting(roomId) {
-    // BUG FIX: currentRoom সেট না করলে অন্য ইউজাররা কানেক্ট হতে পারছিল না!
     currentRoom = roomId; 
 
     document.getElementById('setup-screen').style.display = 'none';
@@ -122,9 +130,16 @@ async function startMeeting(roomId) {
     document.getElementById('displayRoomId').innerText = currentRoom;
     document.getElementById('my-name-badge').innerText = userName + (isAdmin ? " (Host)" : " (You)");
 
-    localTracks.videoTrack.play('local-player');
+    // FIX: ভিডিও আগের জায়গা থেকে থামিয়ে নতুন জায়গায় প্লে করা
+    if(localTracks.videoTrack) {
+        localTracks.videoTrack.stop();
+        localTracks.videoTrack.play('local-player');
+    }
     document.getElementById('local-box').setAttribute('data-uid', 'local');
 
+    // FIX: মিটিংয়ে ঢোকার পর আবার ফোর্স সিঙ্ক
+    await localTracks.audioTrack.setMuted(state.isMuted);
+    await localTracks.videoTrack.setMuted(state.isVidOff);
     syncUI();
 
     try {
@@ -146,7 +161,6 @@ async function startMeeting(roomId) {
         window.location.reload();
     }
 
-    // অন্য কেউ জয়েন করলে (বা আগে থেকেই থাকলে)
     client.on("user-published", async (user, mediaType) => {
         await client.subscribe(user, mediaType);
         
